@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "862889084980",
+    "project_id": "studyswap-1bdf3",
+    "storage_bucket": "studyswap-1bdf3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:862889084980:android:ddc46ed291adf83e81a261",
+        "android_client_info": {
+          "package_name": "com.example.studyswap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQ8s0USuG2bKh8WaLs8I85uENzXEYapUA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
