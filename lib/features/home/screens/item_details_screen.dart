@@ -12,6 +12,7 @@ import '../../chat/data/chat_repository.dart';
 import '../../favorites/logic/favorites_cubit.dart';
 import '../../favorites/data/favorites_repository.dart';
 import '../../../core/animations/app_animations.dart';
+import '../../../core/widgets/user_title_badge.dart';
 
 /// ItemDetailsScreen: Displays full details of a listing.
 class ItemDetailsScreen extends StatefulWidget {
@@ -26,7 +27,6 @@ class ItemDetailsScreen extends StatefulWidget {
 class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   bool _isCreatingChat = false;
   Map<String, dynamic>? _sellerData;
-  bool _isLoadingSeller = true;
 
   @override
   void initState() {
@@ -45,12 +45,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
         if (mounted) {
           setState(() {
             _sellerData = doc.data();
-            _isLoadingSeller = false;
           });
         }
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoadingSeller = false);
+      // Error handling
     }
   }
 
@@ -434,7 +433,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
                                     color: isFav
-                                        ? Colors.red.withOpacity(0.1)
+                                        ? Colors.red.withValues(alpha: 0.1)
                                         : Colors.transparent,
                                     border: Border.all(
                                       color: isFav
@@ -518,6 +517,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                               ),
                             ),
                             AppSizes.gapHSm,
+                            UserTitleBadge(
+                              title: _sellerData?['title'] ?? 'Freshman Trader',
+                              isCompact: true,
+                            ),
+                            AppSizes.gapHSm,
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
@@ -550,16 +554,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                   children: [
                                     Row(
                                       children: [
-                                        const Icon(Icons.star_border, size: 16),
+                                        Icon(Icons.star, size: 16, color: AppColors.primaryYellow),
                                         const SizedBox(width: 4),
                                         Text(
-                                          '4.9',
+                                          (_sellerData?['rating'] as num? ?? 0.0).toStringAsFixed(1),
                                           style: AppTextStyles.bodyMediumDark,
                                         ),
                                       ],
                                     ),
                                     Text(
-                                      '24 Reviews',
+                                      '${_sellerData?['ratingCount'] ?? 0} Reviews',
                                       style: AppTextStyles.bodyMedium.copyWith(
                                         fontSize: 12,
                                       ),
@@ -569,11 +573,11 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                 Column(
                                   children: [
                                     Text(
-                                      '2022',
+                                      '${_sellerData?['dealCount'] ?? 0}',
                                       style: AppTextStyles.bodyMediumDark,
                                     ),
                                     Text(
-                                      'Joined Date',
+                                      'Swaps Done',
                                       style: AppTextStyles.bodyMedium.copyWith(
                                         fontSize: 12,
                                       ),

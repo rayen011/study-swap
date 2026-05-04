@@ -23,4 +23,5 @@ class AppColors {
   static const Color borderGrey = Color(0xFFD1D5DB);
   static const Color solidBlack = Colors.black;
   static const Color errorRed = Colors.redAccent;
+  static const Color primaryYellow = Color(0xFFFFD100); // For stars
 }

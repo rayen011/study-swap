@@ -9,8 +9,9 @@ import '../../../core/theme/app_text_styles.dart';
 import '../logic/chat_cubit.dart';
 import '../data/chat_repository.dart';
 import '../../listings/data/listing_repository.dart';
-import '../../../core/widgets/rating_dialog.dart';
+import '../widgets/rate_user_dialog.dart';
 import '../../../core/animations/app_animations.dart';
+import '../../../core/widgets/user_title_badge.dart';
 
 class ChatDetailsScreen extends StatefulWidget {
   final String chatId;
@@ -32,12 +33,30 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+  Map<String, dynamic>? _receiverData;
 
   @override
   void initState() {
     super.initState();
     context.read<MessageCubit>().fetchMessages(widget.chatId);
     _markRead();
+    _fetchReceiverData();
+  }
+
+  Future<void> _fetchReceiverData() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.receiverId)
+          .get();
+      if (mounted) {
+        setState(() {
+          _receiverData = doc.data();
+        });
+      }
+    } catch (e) {
+      // Error handling
+    }
   }
 
   void _markRead() {
@@ -81,12 +100,22 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(widget.receiverName, style: AppTextStyles.bodyMediumDark),
-                Text(
-                  'Online',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    fontSize: 10,
-                    color: Colors.green,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.star, size: 10, color: AppColors.primaryYellow),
+                    const SizedBox(width: 2),
+                    Text(
+                      (_receiverData?['rating'] as num? ?? 0.0).toStringAsFixed(
+                        1,
+                      ),
+                      style: AppTextStyles.bodySmall.copyWith(fontSize: 10),
+                    ),
+                    const SizedBox(width: 8),
+                    UserTitleBadge(
+                      title: _receiverData?['title'] ?? 'Freshman Trader',
+                      isCompact: true,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -119,14 +148,14 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                     itemBuilder: (context, index) {
                       final msg = messages[index];
                       final isMe = msg['senderId'] == _currentUserId;
-                      
+
                       if (msg['type'] == 'deal') {
                         return SlideIn(
                           fromLeft: !isMe,
                           child: _buildDealCard(msg, isMe),
                         );
                       }
-                      
+
                       return SlideIn(
                         fromLeft: !isMe,
                         child: _buildMessageBubble(
@@ -148,45 +177,55 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
     );
   }
 
-  Future<void> _updateDeal(String messageId, String status, {String? listingId}) async {
+  Future<void> _updateDeal(
+    String messageId,
+    String status, {
+    Map<String, dynamic>? dealData,
+  }) async {
     final chatRepo = context.read<ChatRepository>();
     final listingRepo = context.read<ListingRepository>();
-    
+    final messageCubit = context.read<MessageCubit>();
+
+    if (status == 'completed' && dealData != null) {
+      await messageCubit.completeDeal(
+        chatId: widget.chatId,
+        messageId: messageId,
+        itemId: dealData['itemId'],
+        buyerId: dealData['buyerId'] ?? _currentUserId, // Logic for buyer
+        sellerId: dealData['sellerId'] ?? widget.receiverId,
+      );
+      _showRatingDialog();
+      return;
+    }
+
     await chatRepo.updateDealStatus(widget.chatId, messageId, status);
-    
-    if (listingId != null) {
+
+    if (dealData != null && dealData['itemId'] != null) {
+      final listingId = dealData['itemId'];
       if (status == 'accepted') {
         await listingRepo.updateListingStatus(listingId, 'reserved');
-      } else if (status == 'completed') {
-        await listingRepo.updateListingStatus(listingId, 'sold');
-        _showRatingDialog(listingId);
       } else if (status == 'declined') {
         await listingRepo.updateListingStatus(listingId, 'active');
       }
     }
   }
 
-  void _showRatingDialog(String listingId) {
+  void _showRatingDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => RatingDialog(
-        title: 'Listing #$listingId',
-        onSubmitted: (rating, comment) async {
-          // Save rating to Firestore
-          await FirebaseFirestore.instance.collection('ratings').add({
-            'listingId': listingId,
-            'fromId': _currentUserId,
-            'toId': widget.receiverId,
-            'rating': rating,
-            'comment': comment,
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-          
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Thank you for your feedback!')),
-            );
-          }
+      builder: (ctx) => RateUserDialog(
+        userName: widget.receiverName,
+        onSubmitted: (rating, comment) {
+          context.read<MessageCubit>().submitRating(
+            toId: widget.receiverId,
+            rating: rating,
+            comment: comment,
+            chatId: widget.chatId,
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Thank you for your feedback!')),
+          );
         },
       ),
     );
@@ -195,7 +234,6 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
   Widget _buildDealCard(Map<String, dynamic> msg, bool isMe) {
     final dealData = msg['dealData'] as Map<String, dynamic>;
     final status = dealData['status'] ?? 'pending';
-    final itemId = dealData['itemId'];
     final title = dealData['title'];
     final price = dealData['price'];
     final messageId = msg['id'];
@@ -207,7 +245,9 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
         color: AppColors.white,
         border: Border.all(color: AppColors.solidBlack, width: 2),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4))],
+        boxShadow: const [
+          BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4)),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,17 +256,30 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
             children: [
               const Icon(Icons.handshake, color: AppColors.primaryBlue),
               const SizedBox(width: 8),
-              Text('DEAL REQUEST', style: AppTextStyles.heading2.copyWith(fontSize: 16)),
+              Text(
+                'DEAL REQUEST',
+                style: AppTextStyles.heading2.copyWith(fontSize: 16),
+              ),
             ],
           ),
           const Divider(height: 24),
-          Text(title, style: AppTextStyles.bodyMediumDark.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: AppTextStyles.bodyMediumDark.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           Text('Price: £$price', style: AppTextStyles.bodyMediumDark),
           const SizedBox(height: 16),
-          
+
           if (status == 'pending') ...[
             if (isMe)
-              const Center(child: Text('Waiting for seller response...', style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12)))
+              const Center(
+                child: Text(
+                  'Waiting for seller response...',
+                  style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
+                ),
+              )
             else
               Row(
                 children: [
@@ -239,8 +292,15 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                      onPressed: () => _updateDeal(messageId, 'accepted', listingId: itemId),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => _updateDeal(
+                        messageId,
+                        'accepted',
+                        dealData: dealData,
+                      ),
                       child: const Text('ACCEPT'),
                     ),
                   ),
@@ -250,26 +310,74 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: const Center(child: Text('🤝 DEAL ACCEPTED - ITEM RESERVED', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12))),
-            ),
-            if (isMe) ...[
-              const SizedBox(height: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryBlue, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 40)),
-                onPressed: () => _updateDeal(messageId, 'completed', listingId: itemId),
-                child: const Text('MARK AS BOUGHT'),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ]
+              child: const Center(
+                child: Text(
+                  '🤝 DEAL ACCEPTED - ITEM RESERVED',
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: AppColors.solidBlack, width: 2),
+                ),
+              ),
+              onPressed: () => _updateDeal(
+                messageId,
+                'completed',
+                dealData: {
+                  ...dealData,
+                  'buyerId': isMe ? _currentUserId : widget.receiverId,
+                  'sellerId': isMe ? widget.receiverId : _currentUserId,
+                },
+              ),
+              child: const Text('MARK AS COMPLETED'),
+            ),
           ] else if (status == 'completed') ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-              child: const Center(child: Text('✅ ITEM SOLD & BOUGHT', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12))),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: Text(
+                  '✅ DEAL COMPLETED',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              onPressed: _showRatingDialog,
+              child: const Text('RATE USER'),
             ),
           ] else if (status == 'declined') ...[
-            const Center(child: Text('❌ Deal Declined', style: TextStyle(color: Colors.red, fontSize: 12))),
+            const Center(
+              child: Text(
+                '❌ Deal Declined',
+                style: TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ),
           ],
         ],
       ),
@@ -301,7 +409,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: AppColors.solidBlack.withOpacity(0.1),
+              color: AppColors.solidBlack.withValues(alpha: 0.1),
               offset: const Offset(2, 2),
             ),
           ],

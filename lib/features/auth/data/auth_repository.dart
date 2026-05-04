@@ -52,6 +52,10 @@ class AuthRepository {
         'fullName': name,
         'email': email,
         'university': 'none',
+        'rating': 0.0,
+        'ratingCount': 0,
+        'dealCount': 0,
+        'title': 'Freshman Trader',
         'createdAt': FieldValue.serverTimestamp(),
       });
 

@@ -16,6 +16,7 @@ import 'features/chat/logic/chat_cubit.dart';
 import 'features/favorites/data/favorites_repository.dart';
 import 'features/favorites/logic/favorites_cubit.dart';
 import 'features/profile/logic/profile_cubit.dart';
+import 'features/profile/data/rating_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,12 +28,14 @@ void main() async {
   final listingRepository = ListingRepository();
   final chatRepository = ChatRepository();
   final favoritesRepository = FavoritesRepository();
+  final ratingRepository = RatingRepository();
   
   runApp(MyApp(
     authRepository: authRepository,
     listingRepository: listingRepository,
     chatRepository: chatRepository,
     favoritesRepository: favoritesRepository,
+    ratingRepository: ratingRepository,
   ));
 }
 
@@ -41,6 +44,7 @@ class MyApp extends StatefulWidget {
   final ListingRepository listingRepository;
   final ChatRepository chatRepository;
   final FavoritesRepository favoritesRepository;
+  final RatingRepository ratingRepository;
   
   const MyApp({
     super.key, 
@@ -48,6 +52,7 @@ class MyApp extends StatefulWidget {
     required this.listingRepository,
     required this.chatRepository,
     required this.favoritesRepository,
+    required this.ratingRepository,
   });
 
   @override
@@ -80,6 +85,7 @@ class _MyAppState extends State<MyApp> {
         RepositoryProvider.value(value: widget.listingRepository),
         RepositoryProvider.value(value: widget.chatRepository),
         RepositoryProvider.value(value: widget.favoritesRepository),
+        RepositoryProvider.value(value: widget.ratingRepository),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -88,7 +94,10 @@ class _MyAppState extends State<MyApp> {
           BlocProvider(create: (context) => MyListingsCubit(widget.listingRepository)),
           BlocProvider(create: (context) => ProfileCubit(widget.authRepository)),
           BlocProvider(create: (context) => ChatCubit(widget.chatRepository)),
-          BlocProvider(create: (context) => MessageCubit(widget.chatRepository)),
+          BlocProvider(create: (context) => MessageCubit(
+            widget.chatRepository, 
+            widget.ratingRepository,
+          )),
           BlocProvider(create: (context) => FavoritesCubit(widget.favoritesRepository)),
         ],
         child: MaterialApp.router(

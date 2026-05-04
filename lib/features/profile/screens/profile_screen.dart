@@ -8,6 +8,7 @@ import '../../auth/logic/auth_cubit.dart';
 import '../../auth/logic/auth_state.dart';
 import '../logic/profile_cubit.dart';
 import '../logic/profile_state.dart';
+import '../../../core/widgets/user_title_badge.dart';
 
 /// ProfileScreen: Displays user profile details and settings.
 class ProfileScreen extends StatefulWidget {
@@ -89,10 +90,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       builder: (context, state) {
                         String name = 'STUDENT';
                         String university = 'NONE';
+                        double rating = 0.0;
+                        int ratingCount = 0;
+                        int dealCount = 0;
+                        String title = 'Freshman Trader';
                         
                         if (state is ProfileLoaded) {
                           name = state.userData['fullName']?.toUpperCase() ?? 'STUDENT';
                           university = state.userData['university'] ?? 'none';
+                          rating = (state.userData['rating'] as num? ?? 0.0).toDouble();
+                          ratingCount = (state.userData['ratingCount'] as num? ?? 0).toInt();
+                          dealCount = (state.userData['dealCount'] as num? ?? 0).toInt();
+                          title = state.userData['title'] ?? 'Freshman Trader';
                         }
                         
                         return Column(
@@ -117,6 +126,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                             AppSizes.gapHMD,
+                            UserTitleBadge(title: title),
+                            AppSizes.gapHMD,
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                               decoration: BoxDecoration(
@@ -127,9 +138,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.star_border, size: 14),
+                                  Icon(Icons.star, size: 14, color: AppColors.primaryYellow),
                                   const SizedBox(width: 4),
-                                  Text('4.8 (24 Reviews)', style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 10)),
+                                  Text('${rating.toStringAsFixed(1)} ($ratingCount Reviews)', style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 10)),
                                 ],
                               ),
                             ),
@@ -144,9 +155,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.check_circle_outline, size: 14),
+                                  const Icon(Icons.handshake_outlined, size: 14),
                                   const SizedBox(width: 4),
-                                  Text('15 Swaps Done', style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 10)),
+                                  Text('$dealCount Swaps Done', style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 10)),
                                 ],
                               ),
                             ),

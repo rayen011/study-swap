@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../data/chat_repository.dart';
+import '../../profile/data/rating_repository.dart';
 
 abstract class ChatState {}
 class ChatInitial extends ChatState {}
@@ -40,7 +41,8 @@ class MessageError extends MessageState {
 
 class MessageCubit extends Cubit<MessageState> {
   final ChatRepository _chatRepository;
-  MessageCubit(this._chatRepository) : super(MessageInitial());
+  final RatingRepository _ratingRepository;
+  MessageCubit(this._chatRepository, this._ratingRepository) : super(MessageInitial());
 
   void fetchMessages(String chatId) {
     emit(MessageLoading());
@@ -53,6 +55,44 @@ class MessageCubit extends Cubit<MessageState> {
   Future<void> sendMessage(String chatId, String receiverId, String text) async {
     try {
       await _chatRepository.sendMessage(chatId, receiverId, text);
+    } catch (e) {
+      emit(MessageError(e.toString()));
+    }
+  }
+
+  Future<void> completeDeal({
+    required String chatId,
+    required String messageId,
+    required String itemId,
+    required String buyerId,
+    required String sellerId,
+  }) async {
+    try {
+      await _ratingRepository.completeDeal(
+        chatId: chatId,
+        messageId: messageId,
+        itemId: itemId,
+        buyerId: buyerId,
+        sellerId: sellerId,
+      );
+    } catch (e) {
+      emit(MessageError(e.toString()));
+    }
+  }
+
+  Future<void> submitRating({
+    required String toId,
+    required double rating,
+    String? comment,
+    required String chatId,
+  }) async {
+    try {
+      await _ratingRepository.submitRating(
+        toId: toId,
+        rating: rating,
+        comment: comment,
+        chatId: chatId,
+      );
     } catch (e) {
       emit(MessageError(e.toString()));
     }

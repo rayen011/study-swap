@@ -18,7 +18,7 @@ class ListingsScreen extends StatefulWidget {
 }
 
 class _ListingsScreenState extends State<ListingsScreen> {
-  int _selectedSegment = 0; // 0 for My Listings, 1 for Favorites
+  int _selectedSegment = 0; // 0 for Active, 1 for Past, 2 for Favorites
 
   @override
   void initState() {
@@ -42,7 +42,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
         children: [
           _buildSegmentedControl(),
           Expanded(
-            child: _selectedSegment == 0 ? _buildMyListings() : _buildFavorites(),
+            child: _selectedSegment == 0 
+                ? _buildMyListings(showSold: false) 
+                : _selectedSegment == 1 
+                    ? _buildMyListings(showSold: true)
+                    : _buildFavorites(),
           ),
         ],
       ),
@@ -62,8 +66,9 @@ class _ListingsScreenState extends State<ListingsScreen> {
         ),
         child: Row(
           children: [
-            _buildSegmentItem(0, 'MY LISTINGS'),
-            _buildSegmentItem(1, 'FAVORITES'),
+            _buildSegmentItem(0, 'ACTIVE'),
+            _buildSegmentItem(1, 'PAST'),
+            _buildSegmentItem(2, 'FAVORITES'),
           ],
         ),
       ),
@@ -96,7 +101,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
     );
   }
 
-  Widget _buildMyListings() {
+  Widget _buildMyListings({required bool showSold}) {
     return BlocBuilder<MyListingsCubit, ListingState>(
       builder: (context, state) {
         if (state is ListingLoading) {
@@ -106,23 +111,30 @@ class _ListingsScreenState extends State<ListingsScreen> {
           return Center(child: Text(state.message));
         }
         if (state is ListingLoaded) {
-          if (state.listings.isEmpty) {
+          final listings = state.listings.where((l) {
+            final isSold = l['status'] == 'sold';
+            return showSold ? isSold : !isSold;
+          }).toList();
+
+          if (listings.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('No listings yet', style: AppTextStyles.bodyMediumDark),
-                  AppSizes.gapHMD,
-                  _buildCreateListingCard(),
+                  Text(showSold ? 'No past sales yet' : 'No active listings', style: AppTextStyles.bodyMediumDark),
+                  if (!showSold) ...[
+                    AppSizes.gapHMD,
+                    _buildCreateListingCard(),
+                  ],
                 ],
               ),
             );
           }
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: state.listings.length + 1,
+            itemCount: showSold ? listings.length : listings.length + 1,
             itemBuilder: (context, index) {
-              if (index == state.listings.length) {
+              if (!showSold && index == listings.length) {
                 return FadeInSlide(
                   delay: Duration(milliseconds: index * 100),
                   child: Padding(
@@ -131,14 +143,14 @@ class _ListingsScreenState extends State<ListingsScreen> {
                   ),
                 );
               }
-              final listing = state.listings[index];
+              final listing = listings[index];
               return FadeInSlide(
                 delay: Duration(milliseconds: index * 100),
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: _buildListingCard(
                     listing: listing,
-                    showDelete: true,
+                    showDelete: !showSold,
                   ),
                 ),
               );
