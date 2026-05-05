@@ -17,8 +17,9 @@ class ListingRepository {
     String? imageUrl,
   }) async {
     final uid = _auth.currentUser?.uid;
-    if (uid == null)
+    if (uid == null) {
       throw Exception('User must be logged in to create a listing');
+    }
 
     final userDoc = await _firestore.collection('users').doc(uid).get();
     final sellerName = userDoc.data()?['fullName'] ?? 'Student';

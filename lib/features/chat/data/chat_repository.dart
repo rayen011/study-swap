@@ -90,6 +90,9 @@ class ChatRepository {
         .collection('messages')
         .doc();
 
+    final sellerId = listing['userId'];
+    final buyerId = uid;
+
     batch.set(messageRef, {
       'senderId': uid,
       'receiverId': receiverId,
@@ -101,6 +104,10 @@ class ChatRepository {
         'title': listing['title'],
         'price': listing['price'],
         'status': 'pending', // pending, accepted, declined, completed
+        'buyerId': buyerId,
+        'sellerId': sellerId,
+        'listingOwnerId': sellerId,
+        'createdAt': timestamp,
       },
     });
 

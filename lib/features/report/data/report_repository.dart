@@ -27,4 +27,49 @@ class ReportRepository {
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
+
+  /// Streams all pending reports for moderators.
+  Stream<List<Map<String, dynamic>>> getPendingReports() {
+    return _firestore
+        .collection('reports')
+        .where('status', isEqualTo: 'pending')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+    });
+  }
+
+  /// Resolves a report with an action taken.
+  Future<void> resolveReport({
+    required String reportId,
+    required String status, // reviewed | dismissed
+    String? actionTaken,
+  }) async {
+    await _firestore.collection('reports').doc(reportId).update({
+      'status': status,
+      'actionTaken': actionTaken ?? 'No action taken',
+      'resolvedAt': FieldValue.serverTimestamp(),
+      'moderatorId': _auth.currentUser?.uid,
+    });
+  }
+
+  /// Action: Hide a listing.
+  Future<void> hideListing(String listingId) async {
+    await _firestore.collection('listings').doc(listingId).update({
+      'status': 'hidden',
+    });
+  }
+
+  /// Action: Suspend a user.
+  Future<void> suspendUser(String userId) async {
+    await _firestore.collection('users').doc(userId).update({
+      'isSuspended': true,
+      'suspendedAt': FieldValue.serverTimestamp(),
+    });
+  }
 }

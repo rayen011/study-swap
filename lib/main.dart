@@ -17,6 +17,7 @@ import 'features/favorites/data/favorites_repository.dart';
 import 'features/favorites/logic/favorites_cubit.dart';
 import 'features/profile/logic/profile_cubit.dart';
 import 'features/profile/data/rating_repository.dart';
+import 'features/report/data/report_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +30,7 @@ void main() async {
   final chatRepository = ChatRepository();
   final favoritesRepository = FavoritesRepository();
   final ratingRepository = RatingRepository();
+  final reportRepository = ReportRepository();
   
   runApp(MyApp(
     authRepository: authRepository,
@@ -36,6 +38,7 @@ void main() async {
     chatRepository: chatRepository,
     favoritesRepository: favoritesRepository,
     ratingRepository: ratingRepository,
+    reportRepository: reportRepository,
   ));
 }
 
@@ -45,6 +48,7 @@ class MyApp extends StatefulWidget {
   final ChatRepository chatRepository;
   final FavoritesRepository favoritesRepository;
   final RatingRepository ratingRepository;
+  final ReportRepository reportRepository;
   
   const MyApp({
     super.key, 
@@ -53,6 +57,7 @@ class MyApp extends StatefulWidget {
     required this.chatRepository,
     required this.favoritesRepository,
     required this.ratingRepository,
+    required this.reportRepository,
   });
 
   @override
@@ -86,6 +91,7 @@ class _MyAppState extends State<MyApp> {
         RepositoryProvider.value(value: widget.chatRepository),
         RepositoryProvider.value(value: widget.favoritesRepository),
         RepositoryProvider.value(value: widget.ratingRepository),
+        RepositoryProvider.value(value: widget.reportRepository),
       ],
       child: MultiBlocProvider(
         providers: [

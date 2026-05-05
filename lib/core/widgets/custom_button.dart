@@ -13,6 +13,8 @@ class CustomButton extends StatelessWidget {
   final IconData? trailingIcon;
   final Widget? leadingWidget;
   final bool isFullWidth;
+  final Color? backgroundColor;
+  final Color? textColor;
 
   const CustomButton({
     super.key,
@@ -22,6 +24,8 @@ class CustomButton extends StatelessWidget {
     this.trailingIcon,
     this.leadingWidget,
     this.isFullWidth = true,
+    this.backgroundColor,
+    this.textColor,
   });
 
   @override
@@ -42,7 +46,7 @@ class CustomButton extends StatelessWidget {
         Text(
           text,
           style: _getTextStyle().copyWith(
-            color: isDisabled ? _getTextStyle().color?.withOpacity(0.5) : _getTextStyle().color,
+            color: textColor ?? (isDisabled ? _getTextStyle().color?.withOpacity(0.5) : _getTextStyle().color),
           ),
         ),
         if (trailingIcon != null) ...[
@@ -89,7 +93,9 @@ class CustomButton extends StatelessWidget {
       case ButtonType.solid:
         return Container(
           decoration: BoxDecoration(
-            color: isDisabled ? AppColors.primaryBlue.withOpacity(0.5) : AppColors.primaryBlue,
+            color: isDisabled 
+              ? (backgroundColor?.withOpacity(0.5) ?? AppColors.primaryBlue.withOpacity(0.5)) 
+              : (backgroundColor ?? AppColors.primaryBlue),
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),

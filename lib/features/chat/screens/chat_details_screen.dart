@@ -378,27 +378,32 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryBlue,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 40),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: const BorderSide(color: AppColors.solidBlack, width: 2),
+            // Only show completion button to the Seller
+            if (_currentUserId == dealData['sellerId'])
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryBlue,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 40),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: AppColors.solidBlack, width: 2),
+                  ),
+                ),
+                onPressed: () => _updateDeal(
+                  messageId,
+                  'completed',
+                  dealData: dealData,
+                ),
+                child: const Text('MARK AS COMPLETED'),
+              )
+            else
+              const Center(
+                child: Text(
+                  'Waiting for seller to confirm handover...',
+                  style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
                 ),
               ),
-              onPressed: () => _updateDeal(
-                messageId,
-                'completed',
-                dealData: {
-                  ...dealData,
-                  'buyerId': isMe ? _currentUserId : widget.receiverId,
-                  'sellerId': isMe ? widget.receiverId : _currentUserId,
-                },
-              ),
-              child: const Text('MARK AS COMPLETED'),
-            ),
           ] else if (status == 'completed') ...[
             Container(
               width: double.infinity,

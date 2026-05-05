@@ -311,6 +311,38 @@ class _ProfileScreenState extends State<ProfileScreen>
                           .copyWith(color: Colors.red)),
                 ),
               ),
+              
+              // Moderation Dashboard (Only for Moderators)
+              BlocBuilder<ProfileCubit, ProfileState>(
+                builder: (context, state) {
+                  if (state is ProfileLoaded && state.userData['role'] == 'moderator') {
+                    return Column(
+                      children: [
+                        AppSizes.gapHSm,
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => context.push('/moderation'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.solidBlack,
+                              foregroundColor: AppColors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              side: const BorderSide(
+                                  color: AppColors.solidBlack, width: 1.5),
+                            ),
+                            icon: const Icon(Icons.admin_panel_settings, size: 16),
+                            label: Text('MODERATION DASHBOARD',
+                                style: AppTextStyles.buttonTextWhite),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
             ],
           ),
         ),

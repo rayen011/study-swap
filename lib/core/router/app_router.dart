@@ -12,6 +12,8 @@ import '../../features/chat/screens/chat_screen.dart';
 import '../../features/chat/screens/chat_details_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/report/screens/moderation_queue_screen.dart';
+import '../../features/report/screens/report_details_screen.dart';
 import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/auth/logic/auth_state.dart';
 import '../animations/app_animations.dart';
@@ -94,6 +96,20 @@ class AppRouter {
               state: state,
               transitionType: 'slideUp',
             );
+          },
+        ),
+        GoRoute(
+          path: '/moderation',
+          parentNavigatorKey: _rootNavigatorKey,
+          builder: (context, state) => const ModerationQueueScreen(),
+        ),
+        GoRoute(
+          path: '/moderation/report/:id',
+          parentNavigatorKey: _rootNavigatorKey,
+          builder: (context, state) {
+            final reportId = state.pathParameters['id']!;
+            final initialData = state.extra as Map<String, dynamic>?;
+            return ReportDetailsScreen(reportId: reportId, initialData: initialData);
           },
         ),
         

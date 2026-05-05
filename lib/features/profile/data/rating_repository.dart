@@ -21,7 +21,14 @@ class RatingRepository {
       final userDoc = await transaction.get(userRef);
       
       // 2. Perform writes
-      final reviewRef = _firestore.collection('reviews').doc();
+      final reviewId = 'review_${chatId}_${fromId}_$toId';
+      final reviewRef = _firestore.collection('reviews').doc(reviewId);
+      final reviewDoc = await transaction.get(reviewRef);
+
+      if (reviewDoc.exists) {
+        throw Exception('You have already rated this transaction.');
+      }
+      
       transaction.set(reviewRef, {
         'fromId': fromId,
         'toId': toId,

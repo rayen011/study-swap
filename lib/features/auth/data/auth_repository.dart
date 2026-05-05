@@ -23,10 +23,29 @@ class AuthRepository {
   }
 
   /// Simulates a login process and persists the session if stayLoggedIn is true.
-  Future<void> login(String email, String password, {bool stayLoggedIn = true}) async {
+  Future<void> login(
+    String email,
+    String password, {
+    bool stayLoggedIn = true,
+  }) async {
     try {
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
-      
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      // Check for suspension
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .get();
+      if (userDoc.data()?['isSuspended'] == true) {
+        await _auth.signOut();
+        throw Exception(
+          'Your account has been suspended for violating campus guidelines.',
+        );
+      }
+
       if (stayLoggedIn) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool(_isLoggedInKey, true);
@@ -37,12 +56,26 @@ class AuthRepository {
     }
   }
 
+  /// Checks if the current user is a moderator.
+  Future<bool> isModerator() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return false;
+
+    final doc = await _firestore.collection('users').doc(uid).get();
+    return doc.data()?['role'] == 'moderator';
+  }
+
   /// Simulates a signup process and persists the session if stayLoggedIn is true.
-  Future<void> signup(String name, String email, String password, {bool stayLoggedIn = true}) async {
+  Future<void> signup(
+    String name,
+    String email,
+    String password, {
+    bool stayLoggedIn = true,
+  }) async {
     try {
       final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email, 
-        password: password
+        email: email,
+        password: password,
       );
 
       final uid = userCredential.user!.uid;
@@ -56,6 +89,7 @@ class AuthRepository {
         'ratingCount': 0,
         'dealCount': 0,
         'title': 'Freshman Trader',
+        'role': 'user', // Default role
         'createdAt': FieldValue.serverTimestamp(),
       });
 

@@ -7,6 +7,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../listings/logic/listing_cubit.dart';
 import '../../listings/logic/listing_state.dart';
 import '../../profile/logic/profile_cubit.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../core/animations/app_animations.dart';
 
 // ── Sort options ──────────────────────────────────────────────────────────────
@@ -84,9 +85,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Filtering & sorting logic ─────────────────────────────────────────────
   List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> all) {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    
     var results = all.where((l) {
+      // Hide own listings from the marketplace feed
+      if (l['userId'] == currentUid) return false;
+
       // Only active listings
-      if (l['status'] == 'sold') return false;
+      if (l['status'] == 'sold' || l['status'] == 'hidden') return false;
 
       // Title / category text search
       if (_query.isNotEmpty) {
