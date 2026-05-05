@@ -12,6 +12,7 @@ import '../../listings/data/listing_repository.dart';
 import '../widgets/rate_user_dialog.dart';
 import '../../../core/animations/app_animations.dart';
 import '../../../core/widgets/user_title_badge.dart';
+import '../../report/widgets/report_dialog.dart';
 
 class ChatDetailsScreen extends StatefulWidget {
   final String chatId;
@@ -34,6 +35,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
   final ScrollController _scrollController = ScrollController();
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   Map<String, dynamic>? _receiverData;
+  bool _hasRated = false;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
     context.read<MessageCubit>().fetchMessages(widget.chatId);
     _markRead();
     _fetchReceiverData();
+    _checkIfAlreadyRated();
   }
 
   Future<void> _fetchReceiverData() async {
@@ -52,6 +55,24 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
       if (mounted) {
         setState(() {
           _receiverData = doc.data();
+        });
+      }
+    } catch (e) {
+      // Error handling
+    }
+  }
+
+  Future<void> _checkIfAlreadyRated() async {
+    try {
+      final query = await FirebaseFirestore.instance
+          .collection('reviews')
+          .where('fromId', isEqualTo: _currentUserId)
+          .where('chatId', isEqualTo: widget.chatId)
+          .limit(1)
+          .get();
+      if (mounted) {
+        setState(() {
+          _hasRated = query.docs.isNotEmpty;
         });
       }
     } catch (e) {
@@ -121,6 +142,34 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: AppColors.solidBlack),
+            onSelected: (value) {
+              if (value == 'report') {
+                ReportDialog.show(
+                  context,
+                  targetId: widget.receiverId,
+                  targetType: ReportTargetType.user,
+                  targetName: widget.receiverName,
+                );
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'report',
+                child: Row(
+                  children: [
+                    Icon(Icons.flag_outlined, color: Colors.red, size: 18),
+                    SizedBox(width: 10),
+                    Text('Report User',
+                        style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -222,6 +271,9 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
             comment: comment,
             chatId: widget.chatId,
           );
+
+          // Mark as rated immediately so the button updates
+          if (mounted) setState(() => _hasRated = true);
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Thank you for your feedback!')),
@@ -368,8 +420,24 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
             ),
             const SizedBox(height: 12),
             OutlinedButton(
-              onPressed: _showRatingDialog,
-              child: const Text('RATE USER'),
+              onPressed: _hasRated ? null : _showRatingDialog,
+              style: _hasRated
+                  ? OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green,
+                      side: const BorderSide(color: Colors.green),
+                    )
+                  : null,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_hasRated) ...
+                    const [
+                      Icon(Icons.check_circle, size: 16, color: Colors.green),
+                      SizedBox(width: 6),
+                    ],
+                  Text(_hasRated ? 'RATED' : 'RATE USER'),
+                ],
+              ),
             ),
           ] else if (status == 'declined') ...[
             const Center(

@@ -13,6 +13,7 @@ import '../../favorites/logic/favorites_cubit.dart';
 import '../../favorites/data/favorites_repository.dart';
 import '../../../core/animations/app_animations.dart';
 import '../../../core/widgets/user_title_badge.dart';
+import '../../report/widgets/report_dialog.dart';
 
 /// ItemDetailsScreen: Displays full details of a listing.
 class ItemDetailsScreen extends StatefulWidget {
@@ -254,27 +255,61 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 16,
                       right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(l['status'] ?? 'active'),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: AppColors.solidBlack,
-                            width: 1.5,
+                      child: Row(
+                        children: [
+                          // Status badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(l['status'] ?? 'active'),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: AppColors.solidBlack,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Text(
+                              (l['status'] ?? 'active').toUpperCase(),
+                              style: AppTextStyles.bodyMediumDark.copyWith(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
-                        child: Text(
-                          (l['status'] ?? 'active').toUpperCase(),
-                          style: AppTextStyles.bodyMediumDark.copyWith(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                          const SizedBox(width: 8),
+                          // 3-dot report menu
+                          Builder(
+                            builder: (ctx) => GestureDetector(
+                              onTap: () async {
+                                final currentUid = FirebaseAuth.instance.currentUser?.uid;
+                                final isOwner = currentUid == l['userId'];
+                                if (isOwner) return; // owners can't report own listing
+                                ReportDialog.show(
+                                  ctx,
+                                  targetId: l['id'] ?? '',
+                                  targetType: ReportTargetType.listing,
+                                  targetName: l['title'] ?? 'Listing',
+                                );
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.more_vert,
+                                  color: AppColors.solidBlack,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ],

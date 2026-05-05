@@ -16,7 +16,11 @@ class RatingRepository {
     if (fromId == null) return;
 
     await _firestore.runTransaction((transaction) async {
-      // 1. Add the review to 'reviews' collection
+      // 1. Read user data first
+      final userRef = _firestore.collection('users').doc(toId);
+      final userDoc = await transaction.get(userRef);
+      
+      // 2. Perform writes
       final reviewRef = _firestore.collection('reviews').doc();
       transaction.set(reviewRef, {
         'fromId': fromId,
@@ -27,10 +31,6 @@ class RatingRepository {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // 2. Update the target user's rating stats
-      final userRef = _firestore.collection('users').doc(toId);
-      final userDoc = await transaction.get(userRef);
-      
       if (userDoc.exists) {
         final currentRating = (userDoc.data()?['rating'] as num? ?? 0.0).toDouble();
         final currentCount = (userDoc.data()?['ratingCount'] as num? ?? 0).toInt();
@@ -55,7 +55,14 @@ class RatingRepository {
     required String sellerId,
   }) async {
     await _firestore.runTransaction((transaction) async {
-      // 1. Update deal status in chat message
+      // 1. Perform all reads
+      final sellerRef = _firestore.collection('users').doc(sellerId);
+      final buyerRef = _firestore.collection('users').doc(buyerId);
+      
+      final sellerDoc = await transaction.get(sellerRef);
+      final buyerDoc = await transaction.get(buyerRef);
+      
+      // 2. Perform all writes
       final messageRef = _firestore
           .collection('chats')
           .doc(chatId)
@@ -66,33 +73,29 @@ class RatingRepository {
         'dealData.status': 'completed',
       });
 
-      // 2. Update listing status to 'sold'
       final listingRef = _firestore.collection('listings').doc(itemId);
       transaction.update(listingRef, {
         'status': 'sold',
       });
 
-      // 3. Update Seller stats
-      await _updateUserDealStats(transaction, sellerId);
-      
-      // 4. Update Buyer stats
-      await _updateUserDealStats(transaction, buyerId);
-    });
-  }
+      if (sellerDoc.exists) {
+        final currentDeals = (sellerDoc.data()?['dealCount'] as num? ?? 0).toInt();
+        final newDeals = currentDeals + 1;
+        transaction.update(sellerRef, {
+          'dealCount': newDeals,
+          'title': getTitleForDeals(newDeals),
+        });
+      }
 
-  Future<void> _updateUserDealStats(Transaction transaction, String userId) async {
-    final userRef = _firestore.collection('users').doc(userId);
-    final userDoc = await transaction.get(userRef);
-    
-    if (userDoc.exists) {
-      final currentDeals = (userDoc.data()?['dealCount'] as num? ?? 0).toInt();
-      final newDeals = currentDeals + 1;
-      
-      transaction.update(userRef, {
-        'dealCount': newDeals,
-        'title': getTitleForDeals(newDeals),
-      });
-    }
+      if (buyerDoc.exists) {
+        final currentDeals = (buyerDoc.data()?['dealCount'] as num? ?? 0).toInt();
+        final newDeals = currentDeals + 1;
+        transaction.update(buyerRef, {
+          'dealCount': newDeals,
+          'title': getTitleForDeals(newDeals),
+        });
+      }
+    });
   }
 
   /// Logic for User Titles based on deal count.
