@@ -48,6 +48,23 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  /// Handles password reset requests.
+  Future<void> forgotPassword(String email) async {
+    if (email.isEmpty) {
+      emit(const AuthError('Please enter your email to reset your password'));
+      return;
+    }
+
+    emit(AuthLoading());
+    try {
+      await _authRepository.resetPassword(email);
+      emit(AuthResetPasswordSent());
+    } catch (e) {
+      emit(AuthError(e.toString()));
+      emit(Unauthenticated());
+    }
+  }
+
   /// Handles user logout.
   Future<void> logout() async {
     emit(AuthLoading());

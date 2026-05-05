@@ -56,7 +56,7 @@ class CustomButton extends StatelessWidget {
       ],
     );
 
-    return ScaleAnimation(
+    return TapBounce(
       onTap: isDisabled ? null : onPressed,
       child: SizedBox(
         width: isFullWidth ? double.infinity : null,

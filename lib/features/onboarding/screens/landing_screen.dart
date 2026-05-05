@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/custom_button.dart';
+import '../../../core/animations/app_animations.dart';
 
 /// LandingScreen: Displays the onboarding flow for new users.
 /// Uses a PageView to swipe through different onboarding steps.
@@ -55,7 +56,7 @@ class _LandingScreenState extends State<LandingScreen> {
                   if (_currentPage == 0)
                     const SizedBox(width: 48) // Placeholder to balance SKIP text
                   else
-                    GestureDetector(
+                    TapBounce(
                       onTap: () {
                         _pageController.previousPage(
                           duration: const Duration(milliseconds: 300),
@@ -84,7 +85,7 @@ class _LandingScreenState extends State<LandingScreen> {
                   ),
                   
                   if (_currentPage == 0)
-                    GestureDetector(
+                    TapBounce(
                       onTap: _skip,
                       child: Text(
                         'SKIP',
@@ -145,7 +146,8 @@ class _LandingScreenState extends State<LandingScreen> {
   // Indicator dot widget
   Widget _buildDot(int index) {
     bool isActive = _currentPage == index;
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       height: 8,
       width: isActive ? 32 : 8,
       decoration: BoxDecoration(
@@ -171,40 +173,49 @@ class _LandingScreenState extends State<LandingScreen> {
           // Illustration Placeholder (Neubrutalism style container)
           Expanded(
             child: Center(
-              child: Container(
-                width: double.infinity,
-                margin: const EdgeInsets.symmetric(horizontal: AppSizes.lg, vertical: AppSizes.md),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  border: Border.all(color: AppColors.solidBlack, width: 3),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: AppColors.solidBlack,
-                      offset: Offset(8, 8),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  iconPlaceholder,
-                  size: 100,
-                  color: AppColors.textDark,
+              child: FadeInSlide(
+                duration: const Duration(milliseconds: 600),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: AppSizes.lg, vertical: AppSizes.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    border: Border.all(color: AppColors.solidBlack, width: 3),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: AppColors.solidBlack,
+                        offset: Offset(8, 8),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    iconPlaceholder,
+                    size: 100,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
             ),
           ),
           
           AppSizes.gapHLG,
-          Text(
-            title,
-            style: AppTextStyles.heading1,
-            textAlign: TextAlign.center,
+          FadeInSlide(
+            delay: const Duration(milliseconds: 200),
+            child: Text(
+              title,
+              style: AppTextStyles.heading1,
+              textAlign: TextAlign.center,
+            ),
           ),
           AppSizes.gapHMD,
-          Text(
-            subtitle,
-            style: AppTextStyles.bodyLarge,
-            textAlign: TextAlign.center,
+          FadeInSlide(
+            delay: const Duration(milliseconds: 400),
+            child: Text(
+              subtitle,
+              style: AppTextStyles.bodyLarge,
+              textAlign: TextAlign.center,
+            ),
           ),
           AppSizes.gapHLG,
         ],

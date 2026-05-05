@@ -35,6 +35,13 @@ class _LoginScreenState extends State<LoginScreen> {
       listener: (context, state) {
         if (state is Authenticated) {
           context.go('/home');
+        } else if (state is AuthResetPasswordSent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Password reset email sent! Please check your inbox.'),
+              backgroundColor: AppColors.limeGreen,
+            ),
+          );
         } else if (state is AuthError) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -151,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _passwordController,
                   topRightWidget: GestureDetector(
                     onTap: () {
-                      // Forgot Password Navigation
+                      context.read<AuthCubit>().forgotPassword(_emailController.text);
                     },
                     child: Text(
                       'Forgot password?',

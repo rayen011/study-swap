@@ -211,7 +211,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final color = category == 'TEXTBOOKS' ? const Color(0xFFE2E8F0) : AppColors.limeGreen;
     final isSold = listing['status'] == 'sold';
 
-    return ScaleAnimation(
+    return CardLift(
       onTap: isSold ? null : () => context.push('/item-details', extra: listing),
       child: Container(
         decoration: BoxDecoration(

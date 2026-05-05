@@ -14,6 +14,7 @@ import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/auth/logic/auth_state.dart';
+import '../animations/app_animations.dart';
 
 /// AppRouter: Centralized routing configuration using GoRouter.
 class AppRouter {
@@ -67,6 +68,7 @@ class AppRouter {
             return _buildTransitionPage(
               child: ItemDetailsScreen(listing: listing),
               state: state,
+              transitionType: 'scale',
             );
           },
         ),
@@ -90,6 +92,7 @@ class AppRouter {
                 receiverId: extra['receiverId'],
               ),
               state: state,
+              transitionType: 'slideUp',
             );
           },
         ),
@@ -159,23 +162,20 @@ class AppRouter {
   static CustomTransitionPage _buildTransitionPage({
     required Widget child,
     required GoRouterState state,
+    String transitionType = 'slideFade',
   }) {
     return CustomTransitionPage(
       key: state.pageKey,
       child: child,
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        return FadeTransition(
-          opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
-          child: SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(0.1, 0),
-              end: Offset.zero,
-            ).animate(
-              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-            ),
-            child: child,
-          ),
-        );
+        switch (transitionType) {
+          case 'scale':
+            return PageTransitions.scale(context, animation, secondaryAnimation, child);
+          case 'slideUp':
+            return PageTransitions.slideUp(context, animation, secondaryAnimation, child);
+          default:
+            return PageTransitions.slideFade(context, animation, secondaryAnimation, child);
+        }
       },
     );
   }

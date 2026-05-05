@@ -26,6 +26,9 @@ class Authenticated extends AuthState {
 /// State when the user is not logged in.
 class Unauthenticated extends AuthState {}
 
+/// State when a password reset email has been sent successfully.
+class AuthResetPasswordSent extends AuthState {}
+
 /// State when an error occurs during login/signup.
 class AuthError extends AuthState {
   final String message;

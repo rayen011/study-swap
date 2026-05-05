@@ -94,6 +94,17 @@ class AuthRepository {
     return doc.data();
   }
 
+  /// Sends a password reset email to the specified user.
+  Future<void> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      throw Exception(e.message ?? 'Password reset failed');
+    } catch (e) {
+      throw Exception('An unexpected error occurred during password reset');
+    }
+  }
+
   /// Logs the user out and clears the persistent session.
   Future<void> logout() async {
     await _auth.signOut();

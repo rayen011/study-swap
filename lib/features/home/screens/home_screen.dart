@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _query = '';
   String _selectedCategory = 'All';
   String _selectedCondition = 'All';
-  RangeValues _priceRange = const RangeValues(0, 500);
+  RangeValues _priceRange = const RangeValues(0, 9999);
   SortOption _sortOption = SortOption.newest;
   bool _showFilters = false;
 
@@ -173,14 +173,18 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Icon(Icons.menu_book, color: AppColors.primaryBlue),
             AppSizes.gapWSm,
-            Text('StudySwap',
-                style: AppTextStyles.heading2.copyWith(fontSize: 20)),
+            Text(
+              'StudySwap',
+              style: AppTextStyles.heading2.copyWith(fontSize: 20),
+            ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_none,
-                color: AppColors.solidBlack),
+            icon: const Icon(
+              Icons.notifications_none,
+              color: AppColors.solidBlack,
+            ),
             onPressed: () {},
           ),
           const CircleAvatar(
@@ -210,22 +214,28 @@ class _HomeScreenState extends State<HomeScreen> {
                           decoration: BoxDecoration(
                             color: AppColors.background,
                             border: Border.all(
-                                color: AppColors.solidBlack, width: 1.5),
+                              color: AppColors.solidBlack,
+                              width: 1.5,
+                            ),
                             borderRadius: BorderRadius.circular(24),
                           ),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 2),
+                            horizontal: 16,
+                            vertical: 2,
+                          ),
                           child: Row(
                             children: [
-                              const Icon(Icons.search,
-                                  color: AppColors.textDark, size: 20),
+                              const Icon(
+                                Icons.search,
+                                color: AppColors.textDark,
+                                size: 20,
+                              ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: TextField(
                                   controller: _searchController,
                                   decoration: InputDecoration(
-                                    hintText:
-                                        'Search title or category...',
+                                    hintText: 'Search title or category...',
                                     hintStyle: AppTextStyles.bodyMedium,
                                     border: InputBorder.none,
                                     isDense: true,
@@ -238,8 +248,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     _searchController.clear();
                                     setState(() => _query = '');
                                   },
-                                  child: const Icon(Icons.close,
-                                      size: 18, color: AppColors.textGrey),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: AppColors.textGrey,
+                                  ),
                                 ),
                             ],
                           ),
@@ -266,8 +279,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: const [
                               BoxShadow(
-                                  color: AppColors.solidBlack,
-                                  offset: Offset(2, 2)),
+                                color: AppColors.solidBlack,
+                                offset: Offset(2, 2),
+                              ),
                             ],
                           ),
                           child: Icon(
@@ -304,14 +318,15 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 children: _categories.map((cat) {
                   final isActive = _selectedCategory == cat;
-                  return GestureDetector(
-                    onTap: () =>
-                        setState(() => _selectedCategory = cat),
+                  return TapBounce(
+                    onTap: () => setState(() => _selectedCategory = cat),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: isActive
                             ? AppColors.primaryBlue
@@ -326,8 +341,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         boxShadow: isActive
                             ? const [
                                 BoxShadow(
-                                    color: AppColors.solidBlack,
-                                    offset: Offset(2, 2))
+                                  color: AppColors.solidBlack,
+                                  offset: Offset(2, 2),
+                                ),
                               ]
                             : null,
                       ),
@@ -387,9 +403,12 @@ class _HomeScreenState extends State<HomeScreen> {
           // Sort row
           Row(
             children: [
-              Text('Sort by',
-                  style: AppTextStyles.bodyMediumDark
-                      .copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                'Sort by',
+                style: AppTextStyles.bodyMediumDark.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: SingleChildScrollView(
@@ -403,7 +422,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           duration: const Duration(milliseconds: 150),
                           margin: const EdgeInsets.only(right: 8),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppColors.solidBlack
@@ -416,20 +437,23 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           child: Row(
                             children: [
-                              Icon(opt.icon,
-                                  size: 14,
+                              Icon(
+                                opt.icon,
+                                size: 14,
+                                color: isSelected
+                                    ? AppColors.white
+                                    : AppColors.solidBlack,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                opt.label,
+                                style: AppTextStyles.bodyMediumDark.copyWith(
+                                  fontSize: 12,
                                   color: isSelected
                                       ? AppColors.white
-                                      : AppColors.solidBlack),
-                              const SizedBox(width: 4),
-                              Text(opt.label,
-                                  style: AppTextStyles.bodyMediumDark
-                                      .copyWith(
-                                    fontSize: 12,
-                                    color: isSelected
-                                        ? AppColors.white
-                                        : AppColors.solidBlack,
-                                  )),
+                                      : AppColors.solidBlack,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -446,9 +470,12 @@ class _HomeScreenState extends State<HomeScreen> {
           // Condition row
           Row(
             children: [
-              Text('Condition',
-                  style: AppTextStyles.bodyMediumDark
-                      .copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                'Condition',
+                style: AppTextStyles.bodyMediumDark.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(width: 12),
               ..._conditions.map((c) {
                 final isSelected = _selectedCondition == c;
@@ -458,10 +485,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     duration: const Duration(milliseconds: 150),
                     margin: const EdgeInsets.only(right: 8),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color:
-                          isSelected ? AppColors.limeGreen : AppColors.background,
+                      color: isSelected
+                          ? AppColors.limeGreen
+                          : AppColors.background,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isSelected
@@ -472,18 +502,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       boxShadow: isSelected
                           ? const [
                               BoxShadow(
-                                  color: AppColors.solidBlack,
-                                  offset: Offset(2, 2))
+                                color: AppColors.solidBlack,
+                                offset: Offset(2, 2),
+                              ),
                             ]
                           : null,
                     ),
-                    child: Text(c,
-                        style: AppTextStyles.bodyMediumDark.copyWith(
-                          fontSize: 12,
-                          fontWeight: isSelected
-                              ? FontWeight.w700
-                              : FontWeight.normal,
-                        )),
+                    child: Text(
+                      c,
+                      style: AppTextStyles.bodyMediumDark.copyWith(
+                        fontSize: 12,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                      ),
+                    ),
                   ),
                 );
               }),
@@ -496,13 +529,18 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Price Range',
-                  style: AppTextStyles.bodyMediumDark
-                      .copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                'Price Range',
+                style: AppTextStyles.bodyMediumDark.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               Text(
                 '£${_priceRange.start.toInt()} – £${_priceRange.end.toInt()}',
                 style: AppTextStyles.bodyMediumDark.copyWith(
-                    fontSize: 12, color: AppColors.primaryBlue),
+                  fontSize: 12,
+                  color: AppColors.primaryBlue,
+                ),
               ),
             ],
           ),
@@ -513,12 +551,13 @@ class _HomeScreenState extends State<HomeScreen> {
               thumbColor: AppColors.solidBlack,
               overlayColor: AppColors.primaryBlue.withValues(alpha: 0.1),
               rangeThumbShape: const RoundRangeSliderThumbShape(
-                  enabledThumbRadius: 8),
+                enabledThumbRadius: 8,
+              ),
             ),
             child: RangeSlider(
               values: _priceRange,
               min: 0,
-              max: 500,
+              max: 9999,
               divisions: 50,
               onChanged: (v) => setState(() => _priceRange = v),
             ),
@@ -533,9 +572,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: TextButton.icon(
                 onPressed: _resetFilters,
                 icon: const Icon(Icons.refresh, size: 16, color: Colors.red),
-                label: Text('Reset filters',
-                    style: AppTextStyles.bodyMedium
-                        .copyWith(color: Colors.red, fontSize: 12)),
+                label: Text(
+                  'Reset filters',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: Colors.red,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ),
         ],
@@ -546,7 +589,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Results list ──────────────────────────────────────────────────────────
 
   Widget _buildResultsList(
-      List<Map<String, dynamic>> filtered, int totalCount) {
+    List<Map<String, dynamic>> filtered,
+    int totalCount,
+  ) {
     if (filtered.isEmpty) {
       return Center(
         child: Column(
@@ -554,7 +599,10 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const Icon(Icons.search_off, size: 56, color: AppColors.borderGrey),
             const SizedBox(height: 16),
-            Text('No results found', style: AppTextStyles.heading2.copyWith(fontSize: 18)),
+            Text(
+              'No results found',
+              style: AppTextStyles.heading2.copyWith(fontSize: 18),
+            ),
             const SizedBox(height: 8),
             Text(
               _query.isNotEmpty || _hasActiveFilters
@@ -585,8 +633,10 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 '${filtered.length} result${filtered.length == 1 ? '' : 's'}',
-                style: AppTextStyles.bodyMediumDark
-                    .copyWith(fontSize: 12, fontWeight: FontWeight.w700),
+                style: AppTextStyles.bodyMediumDark.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if (filtered.length < totalCount) ...[
                 Text(
@@ -605,14 +655,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
                 child: Row(
                   children: [
-                    Icon(_sortOption.icon,
-                        size: 14, color: AppColors.primaryBlue),
+                    Icon(
+                      _sortOption.icon,
+                      size: 14,
+                      color: AppColors.primaryBlue,
+                    ),
                     const SizedBox(width: 4),
-                    Text(_sortOption.label,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                            fontSize: 11, color: AppColors.primaryBlue)),
-                    const Icon(Icons.swap_vert,
-                        size: 14, color: AppColors.primaryBlue),
+                    Text(
+                      _sortOption.label,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontSize: 11,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.swap_vert,
+                      size: 14,
+                      color: AppColors.primaryBlue,
+                    ),
                   ],
                 ),
               ),
@@ -640,7 +700,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildFAB() {
     return IdleBounce(
-      child: ScaleAnimation(
+      child: TapBounce(
         onTap: () => context.go('/sell'),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -657,8 +717,10 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const Icon(Icons.add_circle_outline, color: AppColors.solidBlack),
               const SizedBox(width: 8),
-              Text('SELL ITEM',
-                  style: AppTextStyles.buttonText.copyWith(fontSize: 14)),
+              Text(
+                'SELL ITEM',
+                style: AppTextStyles.buttonText.copyWith(fontSize: 14),
+              ),
             ],
           ),
         ),
@@ -676,7 +738,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final condition = listing['condition'] ?? '';
     final university = listing['university'] ?? '';
 
-    return GestureDetector(
+    return CardLift(
       onTap: () => context.push('/item-details', extra: listing),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
@@ -693,8 +755,9 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             // Image placeholder
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(14),
+              ),
               child: Container(
                 height: 150,
                 width: double.infinity,
@@ -702,8 +765,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   children: [
                     const Center(
-                      child: Icon(Icons.image,
-                          size: 50, color: AppColors.textGrey),
+                      child: Icon(
+                        Icons.image,
+                        size: 50,
+                        color: AppColors.textGrey,
+                      ),
                     ),
                     // Price badge
                     Positioned(
@@ -711,15 +777,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       left: 12,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.solidBlack,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(price,
-                            style: AppTextStyles.bodyMediumDark.copyWith(
-                                color: AppColors.white,
-                                fontWeight: FontWeight.w900)),
+                        child: Text(
+                          price,
+                          style: AppTextStyles.bodyMediumDark.copyWith(
+                            color: AppColors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                     ),
                     // Condition badge
@@ -729,20 +800,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         right: 12,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: condition == 'New'
                                 ? AppColors.limeGreen
                                 : const Color(0xFFFFE4D6),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                                color: AppColors.solidBlack, width: 1),
+                              color: AppColors.solidBlack,
+                              width: 1,
+                            ),
                           ),
-                          child: Text(condition,
-                              style: AppTextStyles.bodyMediumDark
-                                  .copyWith(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700)),
+                          child: Text(
+                            condition,
+                            style: AppTextStyles.bodyMediumDark.copyWith(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                       ),
                   ],
@@ -756,11 +833,14 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: AppTextStyles.bodyMediumDark
-                          .copyWith(fontWeight: FontWeight.w700),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    title,
+                    style: AppTextStyles.bodyMediumDark.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 6,
@@ -779,12 +859,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Icon(Icons.person, size: 12),
                       ),
                       const SizedBox(width: 6),
-                      Text(sellerName,
-                          style:
-                              AppTextStyles.bodyMedium.copyWith(fontSize: 12)),
+                      Text(
+                        sellerName,
+                        style: AppTextStyles.bodyMedium.copyWith(fontSize: 12),
+                      ),
                       const Spacer(),
-                      const Icon(Icons.verified,
-                          color: AppColors.solidBlack, size: 16),
+                      const Icon(
+                        Icons.verified,
+                        color: AppColors.solidBlack,
+                        size: 16,
+                      ),
                     ],
                   ),
                 ],
@@ -800,9 +884,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: isPrimary
-            ? const Color(0xFFE0E7FF)
-            : const Color(0xFFE5E7EB),
+        color: isPrimary ? const Color(0xFFE0E7FF) : const Color(0xFFE5E7EB),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(

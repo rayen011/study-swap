@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
 
-/// ScaleAnimation: Adds a snappy scale effect on tap.
-class ScaleAnimation extends StatefulWidget {
+/// TapBounce: A snappy scale-down effect for buttons and interactable elements.
+class TapBounce extends StatefulWidget {
   final Widget child;
   final VoidCallback? onTap;
   final double scaleDown;
+  final Duration duration;
 
-  const ScaleAnimation({
+  const TapBounce({
     super.key,
     required this.child,
     this.onTap,
-    this.scaleDown = 0.95,
+    this.scaleDown = 0.94,
+    this.duration = const Duration(milliseconds: 100),
   });
 
   @override
-  State<ScaleAnimation> createState() => _ScaleAnimationState();
+  State<TapBounce> createState() => _TapBounceState();
 }
 
-class _ScaleAnimationState extends State<ScaleAnimation> with SingleTickerProviderStateMixin {
+class _TapBounceState extends State<TapBounce> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
 
@@ -26,10 +28,10 @@ class _ScaleAnimationState extends State<ScaleAnimation> with SingleTickerProvid
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 120),
+      duration: widget.duration,
     );
     _scaleAnimation = Tween<double>(begin: 1.0, end: widget.scaleDown).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
 
@@ -58,17 +60,115 @@ class _ScaleAnimationState extends State<ScaleAnimation> with SingleTickerProvid
   }
 }
 
+/// ScaleAnimation: Adds a snappy scale effect on tap. (Legacy/Compatible with existing code)
+class ScaleAnimation extends TapBounce {
+  const ScaleAnimation({
+    super.key,
+    required super.child,
+    super.onTap,
+    super.scaleDown = 0.95,
+  });
+}
+
+/// CardLift: Adds a subtle scale-up and shadow lift effect.
+class CardLift extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double scaleUp;
+
+  const CardLift({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.scaleUp = 1.02,
+  });
+
+  @override
+  State<CardLift> createState() => _CardLiftState();
+}
+
+class _CardLiftState extends State<CardLift> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  bool _isHovered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 150),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: widget.scaleUp).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    if (widget.onTap != null) {
+      _controller.forward().then((_) => _controller.reverse());
+      widget.onTap?.call();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) {
+        setState(() => _isHovered = true);
+        _controller.forward();
+      },
+      onExit: (_) {
+        setState(() => _isHovered = false);
+        _controller.reverse();
+      },
+      child: GestureDetector(
+        onTap: _handleTap,
+        onTapDown: (_) => _controller.forward(),
+        onTapUp: (_) => _controller.reverse(),
+        onTapCancel: () => _controller.reverse(),
+        child: ScaleTransition(
+          scale: _scaleAnimation,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              boxShadow: _isHovered || _controller.isAnimating || _controller.value > 0
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        offset: const Offset(0, 8),
+                        blurRadius: 16,
+                      )
+                    ]
+                  : [],
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// FadeInSlide: Animates children with a fade and upward slide.
 class FadeInSlide extends StatefulWidget {
   final Widget child;
   final Duration delay;
   final Duration duration;
+  final Offset beginOffset;
 
   const FadeInSlide({
     super.key,
     required this.child,
     this.delay = Duration.zero,
     this.duration = const Duration(milliseconds: 400),
+    this.beginOffset = const Offset(0, 0.2),
   });
 
   @override
@@ -89,7 +189,7 @@ class _FadeInSlideState extends State<FadeInSlide> with SingleTickerProviderStat
       CurvedAnimation(parent: _controller, curve: const Interval(0.0, 1.0, curve: Curves.easeOut)),
     );
 
-    _offset = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(
+    _offset = Tween<Offset>(begin: widget.beginOffset, end: Offset.zero).animate(
       CurvedAnimation(parent: _controller, curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn)),
     );
 
@@ -273,6 +373,44 @@ class _IdleBounceState extends State<IdleBounce> with SingleTickerProviderStateM
         );
       },
       child: widget.child,
+    );
+  }
+}
+
+/// PageTransitions: Utility for GoRouter custom page transitions.
+class PageTransitions {
+  static Widget slideFade(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return FadeTransition(
+      opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.05, 0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+        child: child,
+      ),
+    );
+  }
+
+  static Widget slideUp(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0, 1),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.fastLinearToSlowEaseIn)),
+      child: child,
+    );
+  }
+
+  static Widget scale(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return ScaleTransition(
+      scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+        CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+      ),
+      child: FadeTransition(
+        opacity: animation,
+        child: child,
+      ),
     );
   }
 }

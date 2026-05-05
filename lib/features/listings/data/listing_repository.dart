@@ -13,6 +13,7 @@ class ListingRepository {
     required double price,
     required String category,
     required String university,
+    required String condition,
     String? imageUrl,
   }) async {
     final uid = _auth.currentUser?.uid;
@@ -28,6 +29,7 @@ class ListingRepository {
       'price': price,
       'category': category,
       'university': university,
+      'condition': condition,
       'userId': uid,
       'sellerName': sellerName,
       'imageUrl': imageUrl ?? '', // Placeholder logic

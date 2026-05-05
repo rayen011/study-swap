@@ -30,6 +30,7 @@ class ListingCubit extends Cubit<ListingState> {
     required double price,
     required String category,
     required String university,
+    required String condition,
     String? imageUrl,
   }) async {
     emit(ListingLoading());
@@ -40,6 +41,7 @@ class ListingCubit extends Cubit<ListingState> {
         price: price,
         category: category,
         university: university,
+        condition: condition,
         imageUrl: imageUrl,
       );
       emit(ListingOperationSuccess());

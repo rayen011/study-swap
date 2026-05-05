@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -26,6 +26,50 @@ class _SellScreenState extends State<SellScreen> {
   String _selectedCondition = 'Like New';
 
   @override
+  void initState() {
+    super.initState();
+    _loadDraft();
+  }
+
+  Future<void> _loadDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _titleController.text = prefs.getString('draft_title') ?? '';
+      _priceController.text = prefs.getString('draft_price') ?? '';
+      _descController.text = prefs.getString('draft_desc') ?? '';
+      _selectedCategory = prefs.getString('draft_category') ?? 'TEXTBOOKS';
+      _selectedCondition = prefs.getString('draft_condition') ?? 'Like New';
+    });
+  }
+
+  Future<void> _saveDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('draft_title', _titleController.text);
+    await prefs.setString('draft_price', _priceController.text);
+    await prefs.setString('draft_desc', _descController.text);
+    await prefs.setString('draft_category', _selectedCategory);
+    await prefs.setString('draft_condition', _selectedCondition);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Draft saved locally'),
+          backgroundColor: AppColors.primaryBlue,
+        ),
+      );
+    }
+  }
+
+  Future<void> _clearDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('draft_title');
+    await prefs.remove('draft_price');
+    await prefs.remove('draft_desc');
+    await prefs.remove('draft_category');
+    await prefs.remove('draft_condition');
+  }
+
+  @override
   Widget build(BuildContext context) {
     return BlocListener<ListingCubit, ListingState>(
       listener: (context, state) {
@@ -33,10 +77,11 @@ class _SellScreenState extends State<SellScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Listing posted successfully!'), backgroundColor: AppColors.limeGreen),
           );
-          // Clear form
+          // Clear form and draft
           _titleController.clear();
           _priceController.clear();
           _descController.clear();
+          _clearDraft();
           // Navigate to home or listings
         } else if (state is ListingError) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -287,9 +332,7 @@ class _SellScreenState extends State<SellScreen> {
               CustomButton(
                 text: 'SAVE DRAFT',
                 type: ButtonType.outline,
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Draft saved locally')));
-                },
+                onPressed: _saveDraft,
               ),
               AppSizes.gapHMD,
               BlocBuilder<ListingCubit, ListingState>(
@@ -319,6 +362,7 @@ class _SellScreenState extends State<SellScreen> {
                                   price: double.tryParse(_priceController.text) ?? 0.0,
                                   category: _selectedCategory,
                                   university: uni,
+                                  condition: _selectedCondition,
                                 );
                           },
                   );
