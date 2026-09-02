@@ -19,7 +19,8 @@ class TapBounce extends StatefulWidget {
   State<TapBounce> createState() => _TapBounceState();
 }
 
-class _TapBounceState extends State<TapBounce> with SingleTickerProviderStateMixin {
+class _TapBounceState extends State<TapBounce>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
 
@@ -87,7 +88,8 @@ class CardLift extends StatefulWidget {
   State<CardLift> createState() => _CardLiftState();
 }
 
-class _CardLiftState extends State<CardLift> with SingleTickerProviderStateMixin {
+class _CardLiftState extends State<CardLift>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scaleAnimation;
   bool _isHovered = false;
@@ -138,13 +140,14 @@ class _CardLiftState extends State<CardLift> with SingleTickerProviderStateMixin
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             decoration: BoxDecoration(
-              boxShadow: _isHovered || _controller.isAnimating || _controller.value > 0
+              boxShadow:
+                  _isHovered || _controller.isAnimating || _controller.value > 0
                   ? [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.1),
                         offset: const Offset(0, 8),
                         blurRadius: 16,
-                      )
+                      ),
                     ]
                   : [],
             ),
@@ -175,7 +178,8 @@ class FadeInSlide extends StatefulWidget {
   State<FadeInSlide> createState() => _FadeInSlideState();
 }
 
-class _FadeInSlideState extends State<FadeInSlide> with SingleTickerProviderStateMixin {
+class _FadeInSlideState extends State<FadeInSlide>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _opacity;
   late Animation<Offset> _offset;
@@ -184,14 +188,21 @@ class _FadeInSlideState extends State<FadeInSlide> with SingleTickerProviderStat
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    
+
     _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 1.0, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 1.0, curve: Curves.easeOut),
+      ),
     );
 
-    _offset = Tween<Offset>(begin: widget.beginOffset, end: Offset.zero).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn)),
-    );
+    _offset = Tween<Offset>(begin: widget.beginOffset, end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn),
+          ),
+        );
 
     Future.delayed(widget.delay, () {
       if (mounted) _controller.forward();
@@ -221,13 +232,18 @@ class PopAnimation extends StatefulWidget {
   final Widget child;
   final bool isTriggered;
 
-  const PopAnimation({super.key, required this.child, required this.isTriggered});
+  const PopAnimation({
+    super.key,
+    required this.child,
+    required this.isTriggered,
+  });
 
   @override
   State<PopAnimation> createState() => _PopAnimationState();
 }
 
-class _PopAnimationState extends State<PopAnimation> with SingleTickerProviderStateMixin {
+class _PopAnimationState extends State<PopAnimation>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _scale;
 
@@ -290,7 +306,7 @@ class _SlideInState extends State<SlideIn> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this, duration: widget.duration);
-    
+
     _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeIn),
     );
@@ -338,7 +354,8 @@ class IdleBounce extends StatefulWidget {
   State<IdleBounce> createState() => _IdleBounceState();
 }
 
-class _IdleBounceState extends State<IdleBounce> with SingleTickerProviderStateMixin {
+class _IdleBounceState extends State<IdleBounce>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _animation;
 
@@ -349,7 +366,7 @@ class _IdleBounceState extends State<IdleBounce> with SingleTickerProviderStateM
       vsync: this,
       duration: widget.duration,
     )..repeat(reverse: true);
-    
+
     _animation = Tween<Offset>(
       begin: Offset.zero,
       end: Offset(0, -widget.offset / 100), // Minor vertical offset
@@ -379,30 +396,54 @@ class _IdleBounceState extends State<IdleBounce> with SingleTickerProviderStateM
 
 /// PageTransitions: Utility for GoRouter custom page transitions.
 class PageTransitions {
-  static Widget slideFade(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+  static Widget slideFade(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
     return FadeTransition(
       opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
       child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0.05, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+        position:
+            Tween<Offset>(
+              begin: const Offset(0.05, 0),
+              end: Offset.zero,
+            ).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
         child: child,
       ),
     );
   }
 
-  static Widget slideUp(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+  static Widget slideUp(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
     return SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0, 1),
-        end: Offset.zero,
-      ).animate(CurvedAnimation(parent: animation, curve: Curves.fastLinearToSlowEaseIn)),
+      position:
+          Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).animate(
+            CurvedAnimation(
+              parent: animation,
+              curve: Curves.fastLinearToSlowEaseIn,
+            ),
+          ),
       child: child,
     );
   }
 
-  static Widget scale(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+  static Widget scale(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
     return ScaleTransition(
       scale: Tween<double>(begin: 0.9, end: 1.0).animate(
         CurvedAnimation(parent: animation, curve: Curves.easeOutBack),

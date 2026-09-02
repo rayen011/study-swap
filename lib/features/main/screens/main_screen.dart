@@ -25,7 +25,9 @@ class MainScreen extends StatelessWidget {
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: AppColors.white,
-          border: Border(top: BorderSide(color: AppColors.solidBlack, width: 2)),
+          border: Border(
+            top: BorderSide(color: AppColors.solidBlack, width: 2),
+          ),
         ),
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: SafeArea(
@@ -59,7 +61,12 @@ class MainScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, String label, {String? badge}) {
+  Widget _buildNavItem(
+    int index,
+    IconData icon,
+    String label, {
+    String? badge,
+  }) {
     final isActive = navigationShell.currentIndex == index;
 
     return GestureDetector(
@@ -102,7 +109,10 @@ class MainScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: Colors.red,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.solidBlack, width: 1.5),
+                        border: Border.all(
+                          color: AppColors.solidBlack,
+                          width: 1.5,
+                        ),
                       ),
                       constraints: const BoxConstraints(
                         minWidth: 18,

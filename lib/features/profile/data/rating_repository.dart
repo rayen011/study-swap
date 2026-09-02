@@ -1,10 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import '../../../core/constants/listing_options.dart';
-import '../../../core/models/message.dart';
 import '../../../core/models/review.dart';
 
+/// RatingRepository: writes reviews and reads them back.
+///
+/// It no longer touches the reputation aggregate on the user document. The
+/// client writes the review; `onReviewCreated` in functions/src/index.ts
+/// recomputes `rating` and `ratingCount`, and `firestore.rules` denies those
+/// fields to every client. Same for deal completion — the app flips the deal
+/// message's status and `onDealCompleted` does the rest.
 class RatingRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -12,11 +17,11 @@ class RatingRepository {
   CollectionReference<Map<String, dynamic>> get _reviews =>
       _firestore.collection('reviews');
 
-  /// Submits a rating for a user and updates their average rating.
+  /// Submits a rating for a user.
   ///
-  /// The aggregate is still recomputed here rather than in a Cloud Function.
-  /// `firestore.rules` bounds what this write may do — see the note in that
-  /// file — but moving it server-side is the real fix.
+  /// The document id is deterministic, and the rules allow create but never
+  /// update — so a second review for the same deal fails rather than
+  /// overwriting the first.
   Future<void> submitRating({
     required String toId,
     required double rating,
@@ -26,43 +31,21 @@ class RatingRepository {
     final fromId = _auth.currentUser?.uid;
     if (fromId == null) return;
 
-    await _firestore.runTransaction((transaction) async {
-      // 1. Read user data first
-      final userRef = _firestore.collection('users').doc(toId);
-      final userDoc = await transaction.get(userRef);
+    final ref = _reviews.doc(
+      Review.idFor(chatId: chatId, fromId: fromId, toId: toId),
+    );
 
-      // 2. Perform writes
-      final reviewRef = _reviews.doc(
-        Review.idFor(chatId: chatId, fromId: fromId, toId: toId),
-      );
-      final reviewDoc = await transaction.get(reviewRef);
+    if ((await ref.get()).exists) {
+      throw Exception('You have already rated this transaction.');
+    }
 
-      if (reviewDoc.exists) {
-        throw Exception('You have already rated this transaction.');
-      }
-
-      transaction.set(reviewRef, {
-        'fromId': fromId,
-        'toId': toId,
-        'rating': rating,
-        'comment': comment ?? '',
-        'chatId': chatId,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-
-      if (userDoc.exists) {
-        final data = userDoc.data() ?? const <String, dynamic>{};
-        final currentRating = (data['rating'] as num? ?? 0.0).toDouble();
-        final currentCount = (data['ratingCount'] as num? ?? 0).toInt();
-
-        final newCount = currentCount + 1;
-        final newRating = ((currentRating * currentCount) + rating) / newCount;
-
-        transaction.update(userRef, {
-          'rating': newRating,
-          'ratingCount': newCount,
-        });
-      }
+    await ref.set({
+      'fromId': fromId,
+      'toId': toId,
+      'rating': rating,
+      'comment': comment ?? '',
+      'chatId': chatId,
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 
@@ -97,63 +80,5 @@ class RatingRepository {
     });
 
     return reviews;
-  }
-
-  /// Completes a deal, increments deal counts, updates titles, and marks listing as sold.
-  Future<void> completeDeal({
-    required String chatId,
-    required String messageId,
-    required String itemId,
-    required String buyerId,
-    required String sellerId,
-  }) async {
-    await _firestore.runTransaction((transaction) async {
-      // 1. Perform all reads
-      final sellerRef = _firestore.collection('users').doc(sellerId);
-      final buyerRef = _firestore.collection('users').doc(buyerId);
-
-      final sellerDoc = await transaction.get(sellerRef);
-      final buyerDoc = await transaction.get(buyerRef);
-
-      // 2. Perform all writes
-      final messageRef = _firestore
-          .collection('chats')
-          .doc(chatId)
-          .collection('messages')
-          .doc(messageId);
-
-      transaction.update(messageRef, {
-        'dealData.status': DealStatus.completed.wire,
-      });
-
-      transaction.update(_firestore.collection('listings').doc(itemId), {
-        'status': ListingStatus.sold.wire,
-      });
-
-      for (final entry in {sellerRef: sellerDoc, buyerRef: buyerDoc}.entries) {
-        final doc = entry.value;
-        if (!doc.exists) continue;
-
-        final current = (doc.data()?['dealCount'] as num? ?? 0).toInt();
-        final updated = current + 1;
-        transaction.update(entry.key, {
-          'dealCount': updated,
-          'title': getTitleForDeals(updated),
-        });
-      }
-    });
-  }
-
-  /// Logic for User Titles based on deal count.
-  ///
-  /// Static so it can be unit-tested without constructing the repository (and
-  /// therefore without an initialised Firebase app). The thresholds are
-  /// mirrored in `firestore.rules` — change both together.
-  static String getTitleForDeals(int deals) {
-    if (deals >= 31) return 'Campus Pro';
-    if (deals >= 16) return 'Deal Maker';
-    if (deals >= 8) return 'Trade Regular';
-    if (deals >= 3) return 'Campus Seller';
-    return 'Freshman Trader';
   }
 }

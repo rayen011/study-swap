@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/custom_button.dart';
+import '../../../core/widgets/listing_image.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -34,10 +35,19 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   bool _isCreatingChat = false;
   AppUser? _sellerData;
 
+  final PageController _galleryController = PageController();
+  int _galleryIndex = 0;
+
   @override
   void initState() {
     super.initState();
     _fetchSellerData();
+  }
+
+  @override
+  void dispose() {
+    _galleryController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchSellerData() async {
@@ -216,18 +226,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
               children: [
                 Stack(
                   children: [
-                    Container(
-                      height: 300,
-                      width: double.infinity,
-                      color: const Color(0xFF6B8E9B),
-                      child: const Center(
-                        child: Icon(
-                          Icons.book,
-                          size: 100,
-                          color: Colors.white54,
-                        ),
-                      ),
-                    ),
+                    _buildGallery(l),
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 16,
                       left: 16,
@@ -360,33 +359,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           ),
                         ],
                       ),
-                      AppSizes.gapHLG,
-                      Row(
-                        children: [
-                          _buildThumbnail(isActive: true),
-                          AppSizes.gapWSm,
-                          _buildThumbnail(),
-                          AppSizes.gapWSm,
-                          _buildThumbnail(),
-                          AppSizes.gapWSm,
-                          Container(
-                            height: 60,
-                            width: 60,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE2E8F0),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '+2 More',
-                                style: AppTextStyles.bodyMediumDark.copyWith(
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                      if (l.imageUrls.length > 1) ...[
+                        AppSizes.gapHLG,
+                        _buildThumbnailStrip(l),
+                      ],
                       AppSizes.gapHXL,
                       Text(
                         'Description',
@@ -586,10 +562,15 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                   children: [
                                     Row(
                                       children: [
-                                        Icon(Icons.star, size: 16, color: AppColors.primaryYellow),
+                                        Icon(
+                                          Icons.star,
+                                          size: 16,
+                                          color: AppColors.primaryYellow,
+                                        ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          (seller ?? AppUser.empty).formattedRating,
+                                          (seller ?? AppUser.empty)
+                                              .formattedRating,
                                           style: AppTextStyles.bodyMediumDark,
                                         ),
                                       ],
@@ -693,16 +674,103 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     );
   }
 
-  Widget _buildThumbnail({bool isActive = false}) {
-    return Container(
-      height: 60,
-      width: 60,
-      decoration: BoxDecoration(
+  /// Full-bleed swipeable photos, with a page counter when there's more than
+  /// one. A listing with no photos keeps the old placeholder block so the
+  /// layout doesn't jump.
+  Widget _buildGallery(Listing listing) {
+    const height = 300.0;
+
+    if (!listing.hasImages) {
+      return Container(
+        height: height,
+        width: double.infinity,
         color: const Color(0xFF6B8E9B),
-        borderRadius: BorderRadius.circular(8),
-        border: isActive
-            ? Border.all(color: AppColors.primaryBlue, width: 2)
-            : null,
+        child: const Center(
+          child: Icon(Icons.book, size: 100, color: Colors.white54),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _galleryController,
+            itemCount: listing.imageUrls.length,
+            onPageChanged: (index) => setState(() => _galleryIndex = index),
+            itemBuilder: (context, index) => ListingImage(
+              url: listing.imageUrls[index],
+              placeholderIconSize: 64,
+              placeholderColor: const Color(0xFF6B8E9B),
+            ),
+          ),
+          if (listing.imageUrls.length > 1)
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.solidBlack.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${_galleryIndex + 1} / ${listing.imageUrls.length}',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Tappable thumbnails that drive the gallery above.
+  Widget _buildThumbnailStrip(Listing listing) {
+    return SizedBox(
+      height: 60,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: listing.imageUrls.length,
+        separatorBuilder: (_, _) => AppSizes.gapWSm,
+        itemBuilder: (context, index) {
+          final isActive = index == _galleryIndex;
+          return GestureDetector(
+            onTap: () => _galleryController.animateToPage(
+              index,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+            ),
+            child: Container(
+              height: 60,
+              width: 60,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isActive
+                      ? AppColors.primaryBlue
+                      : AppColors.borderGrey,
+                  width: isActive ? 2 : 1,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: ListingImage(
+                  url: listing.imageUrls[index],
+                  placeholderIconSize: 20,
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }

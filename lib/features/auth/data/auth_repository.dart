@@ -2,27 +2,43 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// AuthRepository: Handles the data layer for authentication.
-/// Now uses Firebase Auth and Firestore for persistence.
+/// AuthRepository: owns the session.
+///
+/// Firebase Auth is the single source of truth for whether somebody is signed
+/// in — [authStateChanges] is what the app listens to. SharedPreferences holds
+/// exactly one thing: whether the last sign-in asked to stay logged in.
 class AuthRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  static const String _isLoggedInKey = 'is_logged_in';
-  static const String _userEmailKey = 'user_email';
 
-  /// Checks if the user is currently logged in (based on persistence).
-  Future<bool> isUserLoggedIn() async {
+  static const String _stayLoggedInKey = 'stay_logged_in';
+
+  /// Emits on sign-in and sign-out, and once on startup when Firebase has
+  /// finished restoring any persisted session.
+  Stream<User?> authStateChanges() => _auth.authStateChanges();
+
+  User? get currentUser => _auth.currentUser;
+
+  /// Called once before the app starts listening to [authStateChanges].
+  ///
+  /// Firebase persists a session on this device whether or not the user asked
+  /// it to, so honouring "stay logged in" means dropping the restored session
+  /// on the next launch when they opted out.
+  Future<void> restoreSession() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_isLoggedInKey) ?? false;
+    final stayLoggedIn = prefs.getBool(_stayLoggedInKey) ?? true;
+
+    if (!stayLoggedIn && _auth.currentUser != null) {
+      await _auth.signOut();
+    }
   }
 
-  /// Gets the persisted user email.
-  Future<String?> getUserEmail() async {
+  Future<void> _rememberChoice(bool stayLoggedIn) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_userEmailKey);
+    await prefs.setBool(_stayLoggedInKey, stayLoggedIn);
   }
 
-  /// Simulates a login process and persists the session if stayLoggedIn is true.
+  /// Signs in with email and password.
   Future<void> login(
     String email,
     String password, {
@@ -34,7 +50,8 @@ class AuthRepository {
         password: password,
       );
 
-      // Check for suspension
+      // Belt and braces: `firestore.rules` blocks a suspended account's
+      // writes, but signing them straight back out is the honest UX.
       final userDoc = await _firestore
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -46,11 +63,7 @@ class AuthRepository {
         );
       }
 
-      if (stayLoggedIn) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool(_isLoggedInKey, true);
-        await prefs.setString(_userEmailKey, email);
-      }
+      await _rememberChoice(stayLoggedIn);
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'Login failed');
     }
@@ -75,7 +88,7 @@ class AuthRepository {
     }
   }
 
-  /// Simulates a signup process and persists the session if stayLoggedIn is true.
+  /// Registers a new account and creates its user document.
   Future<void> signup(
     String name,
     String email,
@@ -90,7 +103,8 @@ class AuthRepository {
 
       final uid = userCredential.user!.uid;
 
-      // Create user document in Firestore
+      // Create user document in Firestore. The shape here is pinned by
+      // `firestore.rules` — reputation fields must start at zero.
       await _firestore.collection('users').doc(uid).set({
         'fullName': name,
         'email': email,
@@ -105,11 +119,7 @@ class AuthRepository {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      if (stayLoggedIn) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setBool(_isLoggedInKey, true);
-        await prefs.setString(_userEmailKey, email);
-      }
+      await _rememberChoice(stayLoggedIn);
     } on FirebaseAuthException catch (e) {
       throw Exception(e.message ?? 'Signup failed');
     } catch (e) {
@@ -131,11 +141,10 @@ class AuthRepository {
     }
   }
 
-  /// Logs the user out and clears the persistent session.
+  /// Logs the user out.
   Future<void> logout() async {
     await _auth.signOut();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_isLoggedInKey);
-    await prefs.remove(_userEmailKey);
+    // Next launch should default to staying signed in again.
+    await _rememberChoice(true);
   }
 }

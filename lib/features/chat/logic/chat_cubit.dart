@@ -49,13 +49,14 @@ class ChatCubit extends Cubit<ChatState> {
     _subscription = _chatRepository.getChats().listen((chats) {
       // Newest conversation first. Sorted here rather than in the query so
       // the chats collection needs no composite index.
-      final sorted = [...chats]..sort((a, b) {
-        final aTime = a.lastMessageAt;
-        final bTime = b.lastMessageAt;
-        if (aTime == null) return bTime == null ? 0 : -1;
-        if (bTime == null) return 1;
-        return bTime.compareTo(aTime);
-      });
+      final sorted = [...chats]
+        ..sort((a, b) {
+          final aTime = a.lastMessageAt;
+          final bTime = b.lastMessageAt;
+          if (aTime == null) return bTime == null ? 0 : -1;
+          if (bTime == null) return 1;
+          return bTime.compareTo(aTime);
+        });
       emit(ChatLoaded(sorted));
     }, onError: (Object e) => emit(ChatError(e.toString())));
   }
@@ -127,26 +128,6 @@ class MessageCubit extends Cubit<MessageState> {
   ) async {
     try {
       await _chatRepository.sendMessage(chatId, receiverId, text);
-    } catch (e) {
-      emit(MessageError(e.toString()));
-    }
-  }
-
-  Future<void> completeDeal({
-    required String chatId,
-    required String messageId,
-    required String itemId,
-    required String buyerId,
-    required String sellerId,
-  }) async {
-    try {
-      await _ratingRepository.completeDeal(
-        chatId: chatId,
-        messageId: messageId,
-        itemId: itemId,
-        buyerId: buyerId,
-        sellerId: sellerId,
-      );
     } catch (e) {
       emit(MessageError(e.toString()));
     }

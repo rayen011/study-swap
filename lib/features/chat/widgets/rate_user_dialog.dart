@@ -60,7 +60,9 @@ class _RateUserDialogState extends State<RateUserDialog> {
                   },
                   icon: Icon(
                     index < _rating ? Icons.star : Icons.star_border,
-                    color: index < _rating ? AppColors.primaryYellow : AppColors.textGrey,
+                    color: index < _rating
+                        ? AppColors.primaryYellow
+                        : AppColors.textGrey,
                     size: 40,
                   ),
                 );
@@ -76,15 +78,24 @@ class _RateUserDialogState extends State<RateUserDialog> {
                 fillColor: AppColors.white,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppColors.solidBlack, width: 2),
+                  borderSide: const BorderSide(
+                    color: AppColors.solidBlack,
+                    width: 2,
+                  ),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppColors.solidBlack, width: 2),
+                  borderSide: const BorderSide(
+                    color: AppColors.solidBlack,
+                    width: 2,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppColors.primaryBlue, width: 2),
+                  borderSide: const BorderSide(
+                    color: AppColors.primaryBlue,
+                    width: 2,
+                  ),
                 ),
               ),
             ),

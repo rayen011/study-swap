@@ -13,13 +13,10 @@ rules_version = '2';
 // The user must sign out and back in (or call getIdToken(true)) for a new
 // claim to appear in their token.
 //
-// KNOWN INTERIM COMPROMISE: rating / dealCount / title aggregates are still
-// written by the client, because the app computes them in a Firestore
-// transaction. The rules below bound those writes hard — one review per deal,
-// counters may only step by exactly one, ratings must stay in [0,5], and the
-// title must match the value its deal count implies — but the correct fix is
-// a Cloud Function that owns these fields and denies clients entirely. See
-// `isRatingAggregateUpdate` and `isDealAggregateUpdate`.
+// Reputation — rating, ratingCount, dealCount, title — and suspension are
+// owned by Cloud Functions (see functions/src/index.ts) and appear in no
+// client-writable shape below. The Admin SDK bypasses these rules, which is
+// what lets the triggers write fields nobody else can.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -67,15 +64,6 @@ service cloud.firestore {
       return changedKeys().hasOnly(allowed);
     }
 
-    // Mirrors RatingRepository.getTitleForDeals — change both together.
-    function titleForDeals(deals) {
-      return deals >= 31 ? 'Campus Pro'
-           : (deals >= 16 ? 'Deal Maker'
-           : (deals >= 8  ? 'Trade Regular'
-           : (deals >= 3  ? 'Campus Seller'
-           : 'Freshman Trader')));
-    }
-
     // ── users ─────────────────────────────────────────────────────────────
 
     match /users/{userId} {
@@ -111,36 +99,15 @@ service cloud.firestore {
           && request.resource.data.university.size() <= 120;
       }
 
-      // Written by the *other* party when they submit a review.
-      function isRatingAggregateUpdate() {
-        return signedIn()
-          && uid() != userId
-          && onlyChanged(['rating', 'ratingCount'])
-          && request.resource.data.ratingCount == resource.data.ratingCount + 1
-          && request.resource.data.rating is number
-          && request.resource.data.rating >= 0
-          && request.resource.data.rating <= 5;
-      }
-
-      // Written by the seller when a deal is marked complete — for both
-      // parties. The title must be exactly what the new count implies.
-      function isDealAggregateUpdate() {
-        return signedIn()
-          && onlyChanged(['dealCount', 'title'])
-          && request.resource.data.dealCount == resource.data.dealCount + 1
-          && request.resource.data.title ==
-               titleForDeals(request.resource.data.dealCount);
-      }
-
       function isModerationUpdate() {
         return isModerator() && onlyChanged(['isSuspended', 'suspendedAt']);
       }
 
-      // `role` appears in no allowed shape, so no client can ever change it.
-      allow update: if isProfileEdit()
-        || isRatingAggregateUpdate()
-        || isDealAggregateUpdate()
-        || isModerationUpdate();
+      // Only two client-writable shapes: the owner editing their display
+      // fields, and a moderator suspending an account. `role`, `rating`,
+      // `ratingCount`, `dealCount` and `title` appear in neither, so no client
+      // can touch them — onReviewCreated and onDealCompleted own them.
+      allow update: if isProfileEdit() || isModerationUpdate();
 
       allow delete: if false;
 
@@ -174,12 +141,13 @@ service cloud.firestore {
           && request.resource.data.userId == resource.data.userId
           && onlyChanged([
                'title', 'description', 'price', 'category', 'condition',
-               'university', 'imageUrl', 'status'
+               'university', 'imageUrl', 'imageUrls', 'status'
              ])
           && request.resource.data.price is number
           && request.resource.data.price >= 0
           && request.resource.data.price <= 99999
-          && request.resource.data.status in ['active', 'reserved', 'sold'];
+          // 'sold' is set by onDealCompleted, not by the app.
+          && request.resource.data.status in ['active', 'reserved'];
       }
 
       // Moderators can only hide, never edit content.
@@ -242,13 +210,16 @@ service cloud.firestore {
           && request.resource.data.text.size() <= 4000;
 
         // A message is immutable except for the status of a deal attached to
-        // it, which either party may advance.
+        // it. The buyer opens a deal by sending it; every transition after
+        // that — accept, decline, complete — belongs to the seller, which is
+        // exactly what the deal card offers.
         allow update: if inChat()
           && onlyChanged(['dealData'])
           && request.resource.data.dealData
                .diff(resource.data.dealData).affectedKeys().hasOnly(['status'])
           && request.resource.data.dealData.status
-               in ['pending', 'accepted', 'declined', 'completed'];
+               in ['accepted', 'declined', 'completed']
+          && uid() == resource.data.dealData.sellerId;
 
         allow delete: if false;
       }

@@ -1,5 +1,5 @@
 name: studyswap
-description: "A new Flutter project."
+description: "StudySwap — a student-only campus marketplace for textbooks, notes and kit."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -43,6 +43,9 @@ dependencies:
   equatable: ^2.0.8
   cloud_firestore: ^6.3.0
   intl: ^0.20.2
+  firebase_storage: ^13.5.0
+  image_picker: ^1.2.3
+  cached_network_image: ^3.4.1
 
 dev_dependencies:
   flutter_test:
@@ -54,17 +57,20 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  bloc_test: ^10.0.0
+  mocktail: ^1.0.5
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.7
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/branding/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -96,3 +102,32 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Launcher icons — regenerate with:
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/branding/app_icon.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  adaptive_icon_background: "#001FD1"
+  adaptive_icon_foreground: "assets/branding/app_icon_foreground.png"
+  web:
+    generate: true
+    background_color: "#F8F8FA"
+    theme_color: "#001FD1"
+  windows:
+    generate: true
+
+# Native splash — regenerate with:
+#   dart run flutter_native_splash:create
+# Shown before Flutter boots; SplashScreen then covers the window where
+# Firebase restores the session, so the two hand over without a flash.
+flutter_native_splash:
+  color: "#F8F8FA"
+  image: assets/branding/splash_mark.png
+  android_12:
+    color: "#F8F8FA"
+    image: assets/branding/splash_mark.png
+    icon_background_color: "#F8F8FA"

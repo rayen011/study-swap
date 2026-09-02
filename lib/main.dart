@@ -3,11 +3,11 @@ import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'core/router/app_router.dart';
-import 'core/theme/app_colors.dart';
+import 'core/theme/app_theme.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/logic/auth_cubit.dart';
+import 'features/listings/data/image_repository.dart';
 import 'features/listings/data/listing_repository.dart';
 import 'features/listings/logic/listing_cubit.dart';
 import 'features/listings/logic/my_listings_cubit.dart';
@@ -25,39 +25,45 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   final authRepository = AuthRepository();
   final userRepository = UserRepository();
+  final imageRepository = ImageRepository();
   final listingRepository = ListingRepository();
   final chatRepository = ChatRepository();
   final favoritesRepository = FavoritesRepository();
   final ratingRepository = RatingRepository();
   final reportRepository = ReportRepository();
-  
-  runApp(MyApp(
-    authRepository: authRepository,
-    userRepository: userRepository,
-    listingRepository: listingRepository,
-    chatRepository: chatRepository,
-    favoritesRepository: favoritesRepository,
-    ratingRepository: ratingRepository,
-    reportRepository: reportRepository,
-  ));
+
+  runApp(
+    MyApp(
+      authRepository: authRepository,
+      userRepository: userRepository,
+      imageRepository: imageRepository,
+      listingRepository: listingRepository,
+      chatRepository: chatRepository,
+      favoritesRepository: favoritesRepository,
+      ratingRepository: ratingRepository,
+      reportRepository: reportRepository,
+    ),
+  );
 }
 
 class MyApp extends StatefulWidget {
   final AuthRepository authRepository;
   final UserRepository userRepository;
+  final ImageRepository imageRepository;
   final ListingRepository listingRepository;
   final ChatRepository chatRepository;
   final FavoritesRepository favoritesRepository;
   final RatingRepository ratingRepository;
   final ReportRepository reportRepository;
-  
+
   const MyApp({
-    super.key, 
+    super.key,
     required this.authRepository,
     required this.userRepository,
+    required this.imageRepository,
     required this.listingRepository,
     required this.chatRepository,
     required this.favoritesRepository,
@@ -77,7 +83,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _authCubit = AuthCubit(widget.authRepository);
-    _authCubit.checkAuthStatus();
+    _authCubit.start();
     _router = AppRouter.createRouter(_authCubit);
   }
 
@@ -93,6 +99,7 @@ class _MyAppState extends State<MyApp> {
       providers: [
         RepositoryProvider.value(value: widget.authRepository),
         RepositoryProvider.value(value: widget.userRepository),
+        RepositoryProvider.value(value: widget.imageRepository),
         RepositoryProvider.value(value: widget.listingRepository),
         RepositoryProvider.value(value: widget.chatRepository),
         RepositoryProvider.value(value: widget.favoritesRepository),
@@ -102,25 +109,33 @@ class _MyAppState extends State<MyApp> {
       child: MultiBlocProvider(
         providers: [
           BlocProvider.value(value: _authCubit),
-          BlocProvider(create: (context) => ListingCubit(widget.listingRepository)),
-          BlocProvider(create: (context) => MyListingsCubit(widget.listingRepository)),
-          BlocProvider(create: (context) => ProfileCubit(widget.userRepository)),
+          BlocProvider(
+            create: (context) => ListingCubit(
+              widget.listingRepository,
+              widget.imageRepository,
+            ),
+          ),
+          BlocProvider(
+            create: (context) => MyListingsCubit(widget.listingRepository),
+          ),
+          BlocProvider(
+            create: (context) => ProfileCubit(widget.userRepository),
+          ),
           BlocProvider(create: (context) => ChatCubit(widget.chatRepository)),
-          BlocProvider(create: (context) => MessageCubit(
-            widget.chatRepository, 
-            widget.ratingRepository,
-          )),
-          BlocProvider(create: (context) => FavoritesCubit(widget.favoritesRepository)),
+          BlocProvider(
+            create: (context) => MessageCubit(
+              widget.chatRepository,
+              widget.ratingRepository,
+            ),
+          ),
+          BlocProvider(
+            create: (context) => FavoritesCubit(widget.favoritesRepository),
+          ),
         ],
         child: MaterialApp.router(
           title: 'StudySwap',
           debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            scaffoldBackgroundColor: AppColors.background,
-            colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primaryBlue),
-            useMaterial3: true,
-            textTheme: GoogleFonts.interTextTheme(),
-          ),
+          theme: AppTheme.light,
           routerConfig: _router,
         ),
       ),

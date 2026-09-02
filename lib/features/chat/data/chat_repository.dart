@@ -31,10 +31,17 @@ class ChatRepository {
         );
   }
 
-  /// Streams messages for a specific chat, newest first.
+  /// How many messages of a conversation to keep live.
+  ///
+  /// Chats are read newest-first, so this is the recent tail. A long-running
+  /// conversation would otherwise stream its entire history on every open.
+  static const int messageWindow = 100;
+
+  /// Streams the most recent messages for a specific chat, newest first.
   Stream<List<Message>> getMessages(String chatId) {
     return _messagesOf(chatId)
         .orderBy('timestamp', descending: true)
+        .limit(messageWindow)
         .snapshots()
         .map(
           (snap) => snap.docs

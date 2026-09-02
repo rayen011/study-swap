@@ -44,7 +44,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        title: Text('EDIT PROFILE', style: AppTextStyles.heading2.copyWith(fontSize: 18)),
+        title: Text(
+          'EDIT PROFILE',
+          style: AppTextStyles.heading2.copyWith(fontSize: 18),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.solidBlack),
           onPressed: () => context.pop(),
@@ -54,12 +57,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         listener: (context, state) {
           if (state is ProfileUpdateSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: AppColors.limeGreen),
+              const SnackBar(
+                content: Text('Profile updated successfully!'),
+                backgroundColor: AppColors.limeGreen,
+              ),
             );
             context.pop();
           } else if (state is ProfileError) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message), backgroundColor: Colors.red),
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Colors.red,
+              ),
             );
           }
         },
@@ -78,9 +87,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.borderGrey,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.solidBlack, width: 2),
+                        border: Border.all(
+                          color: AppColors.solidBlack,
+                          width: 2,
+                        ),
                       ),
-                      child: const Icon(Icons.person, size: 50, color: AppColors.textGrey),
+                      child: const Icon(
+                        Icons.person,
+                        size: 50,
+                        color: AppColors.textGrey,
+                      ),
                     ),
                     Positioned(
                       bottom: 0,
@@ -90,9 +106,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.primaryBlue,
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.solidBlack, width: 1.5),
+                          border: Border.all(
+                            color: AppColors.solidBlack,
+                            width: 1.5,
+                          ),
                         ),
-                        child: const Icon(Icons.camera_alt, size: 16, color: AppColors.white),
+                        child: const Icon(
+                          Icons.camera_alt,
+                          size: 16,
+                          color: AppColors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -119,15 +142,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               BlocBuilder<ProfileCubit, ProfileState>(
                 builder: (context, state) {
                   return CustomButton(
-                    text: state is ProfileLoading ? 'SAVING...' : 'SAVE CHANGES',
+                    text: state is ProfileLoading
+                        ? 'SAVING...'
+                        : 'SAVE CHANGES',
                     type: ButtonType.solid,
                     onPressed: state is ProfileLoading
                         ? null
                         : () {
                             context.read<ProfileCubit>().updateProfile(
-                                  fullName: _nameController.text,
-                                  university: _uniController.text,
-                                );
+                              fullName: _nameController.text,
+                              university: _uniController.text,
+                            );
                           },
                   );
                 },

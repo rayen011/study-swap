@@ -36,7 +36,7 @@ class AppTextStyles {
     color: AppColors.textGrey,
     height: 1.5,
   );
-  
+
   static TextStyle bodyMediumDark = GoogleFonts.inter(
     fontSize: 14,
     fontWeight: FontWeight.w600,
@@ -50,7 +50,7 @@ class AppTextStyles {
     fontWeight: FontWeight.w700,
     color: AppColors.textDark,
   );
-  
+
   static TextStyle buttonTextWhite = GoogleFonts.inter(
     fontSize: 16,
     fontWeight: FontWeight.w600,

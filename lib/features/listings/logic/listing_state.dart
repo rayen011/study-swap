@@ -14,11 +14,29 @@ class ListingInitial extends ListingState {}
 class ListingLoading extends ListingState {}
 
 class ListingLoaded extends ListingState {
+  const ListingLoaded(
+    this.listings, {
+    this.hasMore = false,
+    this.isLoadingMore = false,
+  });
+
   final List<Listing> listings;
-  const ListingLoaded(this.listings);
+
+  /// True when the window filled to its limit, so there is probably another
+  /// page behind it.
+  final bool hasMore;
+
+  /// True while a larger window is being fetched.
+  final bool isLoadingMore;
+
+  ListingLoaded copyWith({bool? isLoadingMore}) => ListingLoaded(
+    listings,
+    hasMore: hasMore,
+    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+  );
 
   @override
-  List<Object?> get props => [listings];
+  List<Object?> get props => [listings, hasMore, isLoadingMore];
 }
 
 class ListingError extends ListingState {
@@ -30,3 +48,14 @@ class ListingError extends ListingState {
 }
 
 class ListingOperationSuccess extends ListingState {}
+
+/// Emitted while a listing's photos upload, so the sell form can show real
+/// progress instead of an indefinite spinner.
+class ListingUploading extends ListingState {
+  /// 0.0 to 1.0 across the whole batch.
+  final double progress;
+  const ListingUploading(this.progress);
+
+  @override
+  List<Object?> get props => [progress];
+}

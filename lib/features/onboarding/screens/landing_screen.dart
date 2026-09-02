@@ -49,12 +49,17 @@ class _LandingScreenState extends State<LandingScreen> {
           children: [
             // Top Navigation Bar (Progress indicators and Skip/Back buttons)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSizes.lg, vertical: AppSizes.md),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSizes.lg,
+                vertical: AppSizes.md,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   if (_currentPage == 0)
-                    const SizedBox(width: 48) // Placeholder to balance SKIP text
+                    const SizedBox(
+                      width: 48,
+                    ) // Placeholder to balance SKIP text
                   else
                     TapBounce(
                       onTap: () {
@@ -67,12 +72,15 @@ class _LandingScreenState extends State<LandingScreen> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.solidBlack, width: 2),
+                          border: Border.all(
+                            color: AppColors.solidBlack,
+                            width: 2,
+                          ),
                         ),
                         child: const Icon(Icons.arrow_back, size: 20),
                       ),
                     ),
-                  
+
                   // Page Indicators
                   Row(
                     children: [
@@ -80,10 +88,12 @@ class _LandingScreenState extends State<LandingScreen> {
                       AppSizes.gapWSm,
                       _buildDot(1),
                       AppSizes.gapWSm,
-                      _buildDot(2), // Included an extra dot just like the screenshot
+                      _buildDot(
+                        2,
+                      ), // Included an extra dot just like the screenshot
                     ],
                   ),
-                  
+
                   if (_currentPage == 0)
                     TapBounce(
                       onTap: _skip,
@@ -96,7 +106,9 @@ class _LandingScreenState extends State<LandingScreen> {
                       ),
                     )
                   else
-                    const SizedBox(width: 48), // Placeholder to balance Back button
+                    const SizedBox(
+                      width: 48,
+                    ), // Placeholder to balance Back button
                 ],
               ),
             ),
@@ -113,13 +125,15 @@ class _LandingScreenState extends State<LandingScreen> {
                 children: [
                   _buildPageContent(
                     title: 'Buy & sell\neasily',
-                    subtitle: 'The student-only marketplace for everything you need for campus life.',
+                    subtitle:
+                        'The student-only marketplace for everything you need for campus life.',
                     iconPlaceholder: Icons.storefront_outlined,
                     isFirstPage: true,
                   ),
                   _buildPageContent(
                     title: 'Only students,\nno scams',
-                    subtitle: 'Verified university emails ensure a safe and trusted community for everyone.',
+                    subtitle:
+                        'Verified university emails ensure a safe and trusted community for everyone.',
                     iconPlaceholder: Icons.shield_outlined,
                     isFirstPage: false,
                   ),
@@ -153,7 +167,10 @@ class _LandingScreenState extends State<LandingScreen> {
       decoration: BoxDecoration(
         color: isActive ? AppColors.primaryBlue : Colors.transparent,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.solidBlack, width: isActive ? 0 : 2),
+        border: Border.all(
+          color: AppColors.solidBlack,
+          width: isActive ? 0 : 2,
+        ),
       ),
     );
   }
@@ -177,7 +194,10 @@ class _LandingScreenState extends State<LandingScreen> {
                 duration: const Duration(milliseconds: 600),
                 child: Container(
                   width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: AppSizes.lg, vertical: AppSizes.md),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: AppSizes.lg,
+                    vertical: AppSizes.md,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.white,
                     border: Border.all(color: AppColors.solidBlack, width: 3),
@@ -198,7 +218,7 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
             ),
           ),
-          
+
           AppSizes.gapHLG,
           FadeInSlide(
             delay: const Duration(milliseconds: 200),

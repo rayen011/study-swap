@@ -195,8 +195,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                   children: [
                     Icon(Icons.flag_outlined, color: Colors.red, size: 18),
                     SizedBox(width: 10),
-                    Text('Report User',
-                        style: TextStyle(color: Colors.red)),
+                    Text('Report User', style: TextStyle(color: Colors.red)),
                   ],
                 ),
               ),
@@ -255,21 +254,17 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
   ) async {
     final chatRepo = context.read<ChatRepository>();
     final listingRepo = context.read<ListingRepository>();
-    final messageCubit = context.read<MessageCubit>();
+
+    // The client only moves the deal's status. Everything that follows from
+    // completion — both parties' deal counts, their titles, marking the
+    // listing sold — is settled by onDealCompleted, because none of it is
+    // safe to let a device decide.
+    await chatRepo.updateDealStatus(widget.chatId, messageId, status);
 
     if (status == DealStatus.completed) {
-      await messageCubit.completeDeal(
-        chatId: widget.chatId,
-        messageId: messageId,
-        itemId: deal.itemId,
-        buyerId: deal.buyerId.isEmpty ? _currentUserId : deal.buyerId,
-        sellerId: deal.sellerId.isEmpty ? widget.receiverId : deal.sellerId,
-      );
       if (mounted) _showRatingDialog();
       return;
     }
-
-    await chatRepo.updateDealStatus(widget.chatId, messageId, status);
 
     if (deal.itemId.isEmpty) return;
     switch (status) {
@@ -349,8 +344,10 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-          Text('Price: ${deal.formattedPrice}',
-              style: AppTextStyles.bodyMediumDark),
+          Text(
+            'Price: ${deal.formattedPrice}',
+            style: AppTextStyles.bodyMediumDark,
+          ),
           const SizedBox(height: 16),
 
           if (status == DealStatus.pending) ...[
@@ -420,7 +417,10 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                   minimumSize: const Size(double.infinity, 40),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: AppColors.solidBlack, width: 2),
+                    side: const BorderSide(
+                      color: AppColors.solidBlack,
+                      width: 2,
+                    ),
                   ),
                 ),
                 onPressed: () => _updateDeal(
@@ -468,11 +468,10 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (_hasRated) ...
-                    const [
-                      Icon(Icons.check_circle, size: 16, color: Colors.green),
-                      SizedBox(width: 6),
-                    ],
+                  if (_hasRated) ...const [
+                    Icon(Icons.check_circle, size: 16, color: Colors.green),
+                    SizedBox(width: 6),
+                  ],
                   Text(_hasRated ? 'RATED' : 'RATE USER'),
                 ],
               ),
@@ -529,8 +528,9 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               time,
               style: TextStyle(
                 fontSize: 8,
-                color: (isMe ? AppColors.white : AppColors.textGrey)
-                    .withValues(alpha: 0.7),
+                color: (isMe ? AppColors.white : AppColors.textGrey).withValues(
+                  alpha: 0.7,
+                ),
               ),
             ),
           ],

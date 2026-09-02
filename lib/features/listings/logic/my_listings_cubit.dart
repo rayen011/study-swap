@@ -22,7 +22,7 @@ class MyListingsCubit extends Cubit<ListingState> {
     );
   }
 
-  /// Deletes a listing.
+  /// Deletes a listing. Its photos are removed by onListingDeleted.
   Future<void> deleteListing(String listingId) async {
     try {
       await _listingRepository.deleteListing(listingId);

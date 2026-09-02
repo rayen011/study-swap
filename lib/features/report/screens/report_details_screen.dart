@@ -51,7 +51,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
     final listingRepository = context.read<ListingRepository>();
 
     try {
-      final report = _report ?? await reportRepository.getReport(widget.reportId);
+      final report =
+          _report ?? await reportRepository.getReport(widget.reportId);
       if (report == null) return;
 
       AppUser? user;
@@ -151,8 +152,10 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         body: Center(
           child: _isLoading
               ? const CircularProgressIndicator()
-              : Text('This report no longer exists.',
-                  style: AppTextStyles.bodyMediumDark),
+              : Text(
+                  'This report no longer exists.',
+                  style: AppTextStyles.bodyMediumDark,
+                ),
         ),
       );
     }
@@ -220,7 +223,9 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               onPressed: _isLoading
                   ? null
                   : () => _takeAction(
-                      ReportStatus.dismissed, 'Dismissed - No violation'),
+                      ReportStatus.dismissed,
+                      'Dismissed - No violation',
+                    ),
             ),
             AppSizes.gapHMD,
             if (isListing) ...[
@@ -229,8 +234,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
                 type: ButtonType.solid,
                 onPressed: _isLoading
                     ? null
-                    : () =>
-                        _takeAction(ReportStatus.reviewed, 'Hide Listing'),
+                    : () => _takeAction(ReportStatus.reviewed, 'Hide Listing'),
               ),
               AppSizes.gapHMD,
             ],
@@ -241,8 +245,7 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               backgroundColor: Colors.red,
               onPressed: _isLoading
                   ? null
-                  : () =>
-                      _takeAction(ReportStatus.reviewed, 'Suspend User'),
+                  : () => _takeAction(ReportStatus.reviewed, 'Suspend User'),
             ),
 
             AppSizes.gapHXXL,

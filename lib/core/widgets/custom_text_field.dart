@@ -4,7 +4,7 @@ import '../theme/app_sizes.dart';
 import '../theme/app_text_styles.dart';
 
 /// CustomTextField: A reusable text field widget.
-/// Includes support for labels, hint text, prefix/suffix icons, 
+/// Includes support for labels, hint text, prefix/suffix icons,
 /// and an optional top-right action widget (like "Forgot password?").
 class CustomTextField extends StatefulWidget {
   final String label;
@@ -14,6 +14,16 @@ class CustomTextField extends StatefulWidget {
   final Widget? topRightWidget;
   final TextEditingController? controller;
 
+  /// Returns null when the value is acceptable, or the message to show.
+  final String? Function(String?)? validator;
+
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final void Function(String)? onFieldSubmitted;
+
+  /// Enables the platform's password manager / autofill for this field.
+  final Iterable<String>? autofillHints;
+
   const CustomTextField({
     super.key,
     required this.label,
@@ -22,6 +32,11 @@ class CustomTextField extends StatefulWidget {
     this.isPassword = false,
     this.topRightWidget,
     this.controller,
+    this.validator,
+    this.keyboardType,
+    this.textInputAction,
+    this.onFieldSubmitted,
+    this.autofillHints,
   });
 
   @override
@@ -59,9 +74,20 @@ class _CustomTextFieldState extends State<CustomTextField> {
           controller: widget.controller,
           obscureText: _obscureText,
           style: AppTextStyles.bodyMediumDark,
+          validator: widget.validator,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          onFieldSubmitted: widget.onFieldSubmitted,
+          autofillHints: widget.autofillHints,
+          // Show the error as soon as the user leaves an invalid field, but
+          // don't scold them while they're still typing the first character.
+          autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: InputDecoration(
             hintText: widget.hintText,
             hintStyle: AppTextStyles.bodyMedium,
+            errorStyle: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.errorRed,
+            ),
             prefixIcon: Icon(
               widget.prefixIcon,
               color: AppColors.textGrey,
@@ -69,6 +95,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
             ),
             suffixIcon: widget.isPassword
                 ? IconButton(
+                    tooltip: _obscureText ? 'Show password' : 'Hide password',
                     icon: Icon(
                       _obscureText
                           ? Icons.visibility_off_outlined
@@ -96,7 +123,21 @@ class _CustomTextFieldState extends State<CustomTextField> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.primaryBlue, width: 1.5),
+              borderSide: const BorderSide(
+                color: AppColors.primaryBlue,
+                width: 1.5,
+              ),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.errorRed),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(
+                color: AppColors.errorRed,
+                width: 1.5,
+              ),
             ),
           ),
         ),

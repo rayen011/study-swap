@@ -1,47 +1,33 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../../core/animations/app_animations.dart';
 import '../../../core/constants/listing_options.dart';
 import '../../../core/models/listing.dart';
+import '../../../core/models/listing_filter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/listing_image.dart';
 import '../../listings/logic/listing_cubit.dart';
 import '../../listings/logic/listing_state.dart';
 import '../../profile/logic/profile_cubit.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../../core/animations/app_animations.dart';
 
-// ── Sort options ──────────────────────────────────────────────────────────────
-enum SortOption { newest, cheapest, mostExpensive }
-
-extension SortLabel on SortOption {
-  String get label {
-    switch (this) {
-      case SortOption.newest:
-        return 'Newest';
-      case SortOption.cheapest:
-        return 'Cheapest';
-      case SortOption.mostExpensive:
-        return 'Most Expensive';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case SortOption.newest:
-        return Icons.schedule;
-      case SortOption.cheapest:
-        return Icons.arrow_downward;
-      case SortOption.mostExpensive:
-        return Icons.arrow_upward;
-    }
-  }
+extension _SortIcon on ListingSort {
+  IconData get icon => switch (this) {
+    ListingSort.newest => Icons.schedule,
+    ListingSort.cheapest => Icons.arrow_downward,
+    ListingSort.mostExpensive => Icons.arrow_upward,
+  };
 }
 
-/// Upper bound of the price filter. Shared by the slider, the reset action and
-/// the "are any filters active?" check so they can't drift apart.
-const double _kPriceMax = 9999;
+/// How long to wait after the last keystroke before re-filtering. Without it
+/// the whole loaded window is re-filtered and re-sorted on every character.
+const Duration _kSearchDebounce = Duration(milliseconds: 250);
 
 /// HomeScreen: Marketplace feed with live search, filters, and sort.
 class HomeScreen extends StatefulWidget {
@@ -54,12 +40,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // ── Search & filter state ─────────────────────────────────────────────────
   final TextEditingController _searchController = TextEditingController();
-  String _query = '';
-  // null means "All".
-  ListingCategory? _selectedCategory;
-  ListingCondition? _selectedCondition;
-  RangeValues _priceRange = const RangeValues(0, _kPriceMax);
-  SortOption _sortOption = SortOption.newest;
+  final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
+
+  ListingFilter _filter = const ListingFilter();
   bool _showFilters = false;
 
   @override
@@ -67,86 +51,80 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     context.read<ListingCubit>().fetchListings();
     context.read<ProfileCubit>().loadProfile();
-    _searchController.addListener(() {
-      setState(() => _query = _searchController.text.toLowerCase().trim());
-    });
+    _searchController.addListener(_onSearchChanged);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  // ── Filtering & sorting logic ─────────────────────────────────────────────
-  List<Listing> _applyFilters(List<Listing> all) {
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(_kSearchDebounce, () {
+      _updateFilter(
+        _filter.copyWith(
+          query: _searchController.text.toLowerCase().trim(),
+        ),
+      );
+    });
+  }
+
+  /// Loads the next page once the user is within one screen of the end.
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels < position.maxScrollExtent - 400) return;
+
+    context.read<ListingCubit>().loadMore();
+  }
+
+  /// Single funnel for every filter change, so the cubit decides whether the
+  /// Firestore query needs re-issuing.
+  void _updateFilter(ListingFilter next) {
+    if (next == _filter) return;
+    setState(() => _filter = next);
+    context.read<ListingCubit>().applyFilter(next);
+  }
+
+  // ── Client-side narrowing ─────────────────────────────────────────────────
+  //
+  // Status, category, condition and sort are already applied by the query.
+  // What's left is the price range and the text search, which Firestore can't
+  // combine with the chosen sort — see ListingFilter for why.
+  List<Listing> _applyClientFilters(List<Listing> loaded) {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
 
-    final results = all.where((l) {
-      // Hide own listings from the marketplace feed
+    return loaded.where((l) {
+      // Your own listings belong in Collection, not the marketplace feed.
       if (l.isOwnedBy(currentUid)) return false;
 
-      // Sold and moderator-hidden listings never appear in the feed
-      if (!l.status.isPubliclyVisible) return false;
+      if (l.price < _filter.minPrice || l.price > _filter.maxPrice) {
+        return false;
+      }
 
-      // Title / category text search
-      if (_query.isNotEmpty) {
+      if (_filter.query.isNotEmpty) {
         final title = l.title.toLowerCase();
-        final cat = l.categoryLabel.toLowerCase();
-        if (!title.contains(_query) && !cat.contains(_query)) return false;
-      }
-
-      // Category filter
-      if (_selectedCategory != null && l.category != _selectedCategory) {
-        return false;
-      }
-
-      // Condition filter
-      if (_selectedCondition != null && l.condition != _selectedCondition) {
-        return false;
-      }
-
-      // Price range
-      if (l.price < _priceRange.start || l.price > _priceRange.end) {
-        return false;
+        final category = l.categoryLabel.toLowerCase();
+        if (!title.contains(_filter.query) &&
+            !category.contains(_filter.query)) {
+          return false;
+        }
       }
 
       return true;
     }).toList();
-
-    switch (_sortOption) {
-      case SortOption.newest:
-        results.sort((a, b) {
-          final aT = a.createdAt;
-          final bT = b.createdAt;
-          // A pending server timestamp is the newest thing there is.
-          if (aT == null) return bT == null ? 0 : -1;
-          if (bT == null) return 1;
-          return bT.compareTo(aT);
-        });
-      case SortOption.cheapest:
-        results.sort((a, b) => a.price.compareTo(b.price));
-      case SortOption.mostExpensive:
-        results.sort((a, b) => b.price.compareTo(a.price));
-    }
-
-    return results;
   }
 
-  bool get _hasActiveFilters =>
-      _selectedCategory != null ||
-      _selectedCondition != null ||
-      _priceRange.start > 0 ||
-      _priceRange.end < _kPriceMax ||
-      _sortOption != SortOption.newest;
+  bool get _hasActiveFilters => _filter.isActive;
 
   void _resetFilters() {
-    setState(() {
-      _selectedCategory = null;
-      _selectedCondition = null;
-      _priceRange = const RangeValues(0, _kPriceMax);
-      _sortOption = SortOption.newest;
-    });
+    _searchController.clear();
+    _updateFilter(const ListingFilter());
   }
 
   @override
@@ -234,11 +212,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                               ),
-                              if (_query.isNotEmpty)
+                              if (_searchController.text.isNotEmpty)
                                 GestureDetector(
                                   onTap: () {
                                     _searchController.clear();
-                                    setState(() => _query = '');
+                                    _updateFilter(
+                                      _filter.copyWith(query: ''),
+                                    );
                                   },
                                   child: const Icon(
                                     Icons.close,
@@ -308,53 +288,60 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: <ListingCategory?>[null, ...ListingCategory.values].map((
-                  cat,
-                ) {
-                  final isActive = _selectedCategory == cat;
-                  return TapBounce(
-                    onTap: () => setState(() => _selectedCategory = cat),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      margin: const EdgeInsets.only(right: 8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isActive
-                            ? AppColors.primaryBlue
-                            : AppColors.white,
-                        border: Border.all(
-                          color: isActive
-                              ? AppColors.primaryBlue
-                              : AppColors.borderGrey,
-                          width: 1.5,
+                children: <ListingCategory?>[null, ...ListingCategory.values]
+                    .map((
+                      cat,
+                    ) {
+                      final isActive = _filter.category == cat;
+                      return TapBounce(
+                        onTap: () => _updateFilter(
+                          _filter.copyWith(
+                            category: cat,
+                            clearCategory: cat == null,
+                          ),
                         ),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: isActive
-                            ? const [
-                                BoxShadow(
-                                  color: AppColors.solidBlack,
-                                  offset: Offset(2, 2),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: Text(
-                        cat?.label ?? 'All',
-                        style: AppTextStyles.bodyMediumDark.copyWith(
-                          color: isActive
-                              ? AppColors.white
-                              : AppColors.textGrey,
-                          fontWeight: isActive
-                              ? FontWeight.w700
-                              : FontWeight.normal,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? AppColors.primaryBlue
+                                : AppColors.white,
+                            border: Border.all(
+                              color: isActive
+                                  ? AppColors.primaryBlue
+                                  : AppColors.borderGrey,
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: isActive
+                                ? const [
+                                    BoxShadow(
+                                      color: AppColors.solidBlack,
+                                      offset: Offset(2, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Text(
+                            cat?.label ?? 'All',
+                            style: AppTextStyles.bodyMediumDark.copyWith(
+                              color: isActive
+                                  ? AppColors.white
+                                  : AppColors.textGrey,
+                              fontWeight: isActive
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                      );
+                    })
+                    .toList(),
               ),
             ),
           ),
@@ -370,8 +357,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Center(child: Text(state.message));
                 }
                 if (state is ListingLoaded) {
-                  final filtered = _applyFilters(state.listings);
-                  return _buildResultsList(filtered, state.listings.length);
+                  return _buildResultsList(
+                    _applyClientFilters(state.listings),
+                    state,
+                  );
                 }
                 return const SizedBox();
               },
@@ -408,10 +397,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: SortOption.values.map((opt) {
-                      final isSelected = _sortOption == opt;
+                    children: ListingSort.values.map((opt) {
+                      final isSelected = _filter.sort == opt;
                       return GestureDetector(
-                        onTap: () => setState(() => _sortOption = opt),
+                        onTap: () => _updateFilter(_filter.copyWith(sort: opt)),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           margin: const EdgeInsets.only(right: 8),
@@ -475,52 +464,58 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: <ListingCondition?>[
-                      null,
-                      ...ListingCondition.values,
-                    ].map((c) {
-                      final isSelected = _selectedCondition == c;
-                      return GestureDetector(
-                        onTap: () => setState(() => _selectedCondition = c),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppColors.limeGreen
-                                : AppColors.background,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isSelected
-                                  ? AppColors.solidBlack
-                                  : AppColors.borderGrey,
-                              width: 1.5,
+                    children:
+                        <ListingCondition?>[
+                          null,
+                          ...ListingCondition.values,
+                        ].map((c) {
+                          final isSelected = _filter.condition == c;
+                          return GestureDetector(
+                            onTap: () => _updateFilter(
+                              _filter.copyWith(
+                                condition: c,
+                                clearCondition: c == null,
+                              ),
                             ),
-                            boxShadow: isSelected
-                                ? const [
-                                    BoxShadow(
-                                      color: AppColors.solidBlack,
-                                      offset: Offset(2, 2),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Text(
-                            c?.label ?? 'All',
-                            style: AppTextStyles.bodyMediumDark.copyWith(
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.normal,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              margin: const EdgeInsets.only(right: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.limeGreen
+                                    : AppColors.background,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppColors.solidBlack
+                                      : AppColors.borderGrey,
+                                  width: 1.5,
+                                ),
+                                boxShadow: isSelected
+                                    ? const [
+                                        BoxShadow(
+                                          color: AppColors.solidBlack,
+                                          offset: Offset(2, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Text(
+                                c?.label ?? 'All',
+                                style: AppTextStyles.bodyMediumDark.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.normal,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                          );
+                        }).toList(),
                   ),
                 ),
               ),
@@ -540,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Text(
-                '£${_priceRange.start.toInt()} – £${_priceRange.end.toInt()}',
+                '£${_filter.minPrice.toInt()} – £${_filter.maxPrice.toInt()}',
                 style: AppTextStyles.bodyMediumDark.copyWith(
                   fontSize: 12,
                   color: AppColors.primaryBlue,
@@ -559,11 +554,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             child: RangeSlider(
-              values: _priceRange,
+              values: RangeValues(_filter.minPrice, _filter.maxPrice),
               min: 0,
-              max: _kPriceMax,
+              max: ListingFilter.maxPriceCeiling,
               divisions: 50,
-              onChanged: (v) => setState(() => _priceRange = v),
+              onChanged: (v) => _updateFilter(
+                _filter.copyWith(minPrice: v.start, maxPrice: v.end),
+              ),
             ),
           ),
 
@@ -592,7 +589,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Results list ──────────────────────────────────────────────────────────
 
-  Widget _buildResultsList(List<Listing> filtered, int totalCount) {
+  Widget _buildResultsList(List<Listing> filtered, ListingLoaded state) {
     if (filtered.isEmpty) {
       return Center(
         child: Column(
@@ -606,7 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              _query.isNotEmpty || _hasActiveFilters
+              _hasActiveFilters || _filter.query.isNotEmpty
                   ? 'Try adjusting your search or filters'
                   : 'Be the first to list something!',
               style: AppTextStyles.bodyMedium,
@@ -639,9 +636,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              if (filtered.length < totalCount) ...[
+              // The price range and text search only narrow what's loaded, so
+              // say so rather than implying it's the whole catalogue.
+              if (filtered.length < state.listings.length) ...[
                 Text(
-                  ' (filtered from $totalCount)',
+                  ' of ${state.listings.length} loaded',
                   style: AppTextStyles.bodyMedium.copyWith(fontSize: 11),
                 ),
               ],
@@ -649,21 +648,21 @@ class _HomeScreenState extends State<HomeScreen> {
               // Sort quick-switch
               GestureDetector(
                 onTap: () {
-                  final opts = SortOption.values;
+                  const opts = ListingSort.values;
                   final next =
-                      opts[(opts.indexOf(_sortOption) + 1) % opts.length];
-                  setState(() => _sortOption = next);
+                      opts[(opts.indexOf(_filter.sort) + 1) % opts.length];
+                  _updateFilter(_filter.copyWith(sort: next));
                 },
                 child: Row(
                   children: [
                     Icon(
-                      _sortOption.icon,
+                      _filter.sort.icon,
                       size: 14,
                       color: AppColors.primaryBlue,
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _sortOption.label,
+                      _filter.sort.label,
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontSize: 11,
                         color: AppColors.primaryBlue,
@@ -683,17 +682,53 @@ class _HomeScreenState extends State<HomeScreen> {
 
         Expanded(
           child: ListView.builder(
+            controller: _scrollController,
             padding: const EdgeInsets.all(16),
-            itemCount: filtered.length,
+            // One extra row for the pagination footer.
+            itemCount: filtered.length + (state.hasMore ? 1 : 0),
             itemBuilder: (context, index) {
+              if (index == filtered.length) return _buildLoadMoreFooter(state);
+
               return FadeInSlide(
-                delay: Duration(milliseconds: index * 60),
+                // Stagger only the first page; later pages arrive mid-scroll
+                // and a delay there just makes them feel laggy.
+                delay: Duration(milliseconds: (index % 20) * 60),
                 child: _buildItemCard(context, filtered[index]),
               );
             },
           ),
         ),
       ],
+    );
+  }
+
+  /// Sits under the last card. Loading happens on scroll, so this is feedback
+  /// rather than a control — but it stays tappable in case the scroll listener
+  /// hasn't fired.
+  Widget _buildLoadMoreFooter(ListingLoaded state) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: state.isLoadingMore
+            ? const SizedBox(
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.primaryBlue,
+                ),
+              )
+            : TextButton(
+                onPressed: () => context.read<ListingCubit>().loadMore(),
+                child: Text(
+                  'Load more',
+                  style: AppTextStyles.bodyMediumDark.copyWith(
+                    color: AppColors.primaryBlue,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+      ),
     );
   }
 
@@ -754,18 +789,15 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(14),
               ),
-              child: Container(
+              child: SizedBox(
                 height: 150,
                 width: double.infinity,
-                color: const Color(0xFFE5E7EB),
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    const Center(
-                      child: Icon(
-                        Icons.image,
-                        size: 50,
-                        color: AppColors.textGrey,
-                      ),
+                    ListingImage(
+                      url: listing.coverImageUrl,
+                      placeholderIconSize: 50,
                     ),
                     // Price badge
                     Positioned(

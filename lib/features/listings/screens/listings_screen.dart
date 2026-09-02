@@ -6,6 +6,7 @@ import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/listing_image.dart';
 import '../logic/my_listings_cubit.dart';
 import '../logic/listing_state.dart';
 import '../../favorites/logic/favorites_cubit.dart';
@@ -37,18 +38,21 @@ class _ListingsScreenState extends State<ListingsScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: Text('COLLECTION', style: AppTextStyles.heading2.copyWith(fontSize: 20)),
+        title: Text(
+          'COLLECTION',
+          style: AppTextStyles.heading2.copyWith(fontSize: 20),
+        ),
         centerTitle: false,
       ),
       body: Column(
         children: [
           _buildSegmentedControl(),
           Expanded(
-            child: _selectedSegment == 0 
-                ? _buildMyListings(showSold: false) 
-                : _selectedSegment == 1 
-                    ? _buildMyListings(showSold: true)
-                    : _buildFavorites(),
+            child: _selectedSegment == 0
+                ? _buildMyListings(showSold: false)
+                : _selectedSegment == 1
+                ? _buildMyListings(showSold: true)
+                : _buildFavorites(),
           ),
         ],
       ),
@@ -64,7 +68,9 @@ class _ListingsScreenState extends State<ListingsScreen> {
           color: AppColors.white,
           border: Border.all(color: AppColors.solidBlack, width: 2),
           borderRadius: BorderRadius.circular(12),
-          boxShadow: const [BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4))],
+          boxShadow: const [
+            BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4)),
+          ],
         ),
         child: Row(
           children: [
@@ -123,7 +129,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(showSold ? 'No past sales yet' : 'No active listings', style: AppTextStyles.bodyMediumDark),
+                  Text(
+                    showSold ? 'No past sales yet' : 'No active listings',
+                    style: AppTextStyles.bodyMediumDark,
+                  ),
                   if (!showSold) ...[
                     AppSizes.gapHMD,
                     _buildCreateListingCard(),
@@ -176,7 +185,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
         if (state is FavoritesLoaded) {
           if (state.favorites.isEmpty) {
             return Center(
-              child: Text('No favorites added yet', style: AppTextStyles.bodyMediumDark),
+              child: Text(
+                'No favorites added yet',
+                style: AppTextStyles.bodyMediumDark,
+              ),
             );
           }
           return ListView.builder(
@@ -212,13 +224,17 @@ class _ListingsScreenState extends State<ListingsScreen> {
     final isSold = listing.status == ListingStatus.sold;
 
     return CardLift(
-      onTap: isSold ? null : () => context.push('/item-details', extra: listing),
+      onTap: isSold
+          ? null
+          : () => context.push('/item-details', extra: listing),
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.solidBlack, width: 2),
-          boxShadow: const [BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4))],
+          boxShadow: const [
+            BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4)),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,26 +244,49 @@ class _ListingsScreenState extends State<ListingsScreen> {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                border: const Border(bottom: BorderSide(color: AppColors.solidBlack, width: 2)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(14),
+                ),
+                border: const Border(
+                  bottom: BorderSide(color: AppColors.solidBlack, width: 2),
+                ),
               ),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  const Center(child: Icon(Icons.image, size: 64, color: AppColors.textGrey)),
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(12),
+                    ),
+                    child: ListingImage(
+                      url: listing.coverImageUrl,
+                      placeholderIconSize: 64,
+                      placeholderColor: color,
+                    ),
+                  ),
                   if (listing.status != ListingStatus.active)
                     Positioned.fill(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: (isSold ? Colors.black : Colors.orange).withValues(alpha: 0.6),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                          color: (isSold ? Colors.black : Colors.orange)
+                              .withValues(alpha: 0.6),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(14),
+                          ),
                         ),
                         child: Center(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.white,
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: AppColors.solidBlack, width: 1.5),
+                              border: Border.all(
+                                color: AppColors.solidBlack,
+                                width: 1.5,
+                              ),
                             ),
                             child: Text(
                               listing.status.label.toUpperCase(),
@@ -264,25 +303,45 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     top: 12,
                     left: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.primaryBlue,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(listing.categoryLabel.toUpperCase(), style: AppTextStyles.bodyMediumDark.copyWith(color: AppColors.white, fontSize: 10)),
+                      child: Text(
+                        listing.categoryLabel.toUpperCase(),
+                        style: AppTextStyles.bodyMediumDark.copyWith(
+                          color: AppColors.white,
+                          fontSize: 10,
+                        ),
+                      ),
                     ),
                   ),
                   Positioned(
                     bottom: 12,
                     right: 12,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF4C7500),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.solidBlack, width: 2),
+                        border: Border.all(
+                          color: AppColors.solidBlack,
+                          width: 2,
+                        ),
                       ),
-                      child: Text(listing.formattedPrice, style: AppTextStyles.bodyMediumDark.copyWith(color: AppColors.white)),
+                      child: Text(
+                        listing.formattedPrice,
+                        style: AppTextStyles.bodyMediumDark.copyWith(
+                          color: AppColors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -297,15 +356,27 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(listing.title, style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(listing.university, style: AppTextStyles.bodyMedium.copyWith(fontSize: 12)),
+                        Text(
+                          listing.title,
+                          style: AppTextStyles.bodyMediumDark.copyWith(
+                            fontSize: 16,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          listing.university,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   if (showDelete)
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _showDeleteDialog(listing.id),
+                      onPressed: () => _showDeleteDialog(listing),
                     ),
                 ],
               ),
@@ -316,17 +387,25 @@ class _ListingsScreenState extends State<ListingsScreen> {
     );
   }
 
-  void _showDeleteDialog(String id) {
+  void _showDeleteDialog(Listing listing) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Listing?'),
-        content: const Text('Are you sure you want to remove this listing?'),
+        content: Text(
+          listing.hasImages
+              ? 'This removes the listing and its ${listing.imageUrls.length} '
+                    'photo${listing.imageUrls.length == 1 ? '' : 's'}.'
+              : 'Are you sure you want to remove this listing?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
           TextButton(
             onPressed: () {
-              context.read<MyListingsCubit>().deleteListing(id);
+              context.read<MyListingsCubit>().deleteListing(listing.id);
               Navigator.pop(ctx);
             },
             child: const Text('DELETE', style: TextStyle(color: Colors.red)),
@@ -346,13 +425,18 @@ class _ListingsScreenState extends State<ListingsScreen> {
           color: const Color(0xFFFFE4D6),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.solidBlack, width: 2),
-          boxShadow: const [BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4))],
+          boxShadow: const [
+            BoxShadow(color: AppColors.solidBlack, offset: Offset(4, 4)),
+          ],
         ),
         child: Column(
           children: [
             const Icon(Icons.add_circle_outline, size: 32),
             AppSizes.gapHSm,
-            Text('Create New Listing', style: AppTextStyles.heading2.copyWith(fontSize: 18)),
+            Text(
+              'Create New Listing',
+              style: AppTextStyles.heading2.copyWith(fontSize: 18),
+            ),
           ],
         ),
       ),

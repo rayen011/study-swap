@@ -11,13 +11,13 @@ import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/logic/auth_cubit.dart';
-import '../../auth/logic/auth_state.dart';
 import '../../listings/logic/my_listings_cubit.dart';
 import '../../listings/logic/listing_state.dart';
 import '../data/rating_repository.dart';
 import '../data/user_repository.dart';
 import '../logic/profile_cubit.dart';
 import '../logic/profile_state.dart';
+import '../../../core/widgets/listing_image.dart';
 import '../../../core/widgets/user_title_badge.dart';
 
 /// ProfileScreen: Dynamic profile with listings grid, rating history, and stats.
@@ -87,112 +87,125 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<AuthCubit, AuthState>(
-      listener: (context, state) {
-        if (state is Unauthenticated) context.go('/login');
-      },
-      child: Scaffold(
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
         backgroundColor: AppColors.background,
-        appBar: AppBar(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          surfaceTintColor: Colors.transparent,
-          title: Row(
-            children: [
-              const CircleAvatar(
-                radius: 14,
-                backgroundColor: AppColors.borderGrey,
-                child: Icon(Icons.person, size: 14, color: AppColors.textGrey),
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            const CircleAvatar(
+              radius: 14,
+              backgroundColor: AppColors.borderGrey,
+              child: Icon(Icons.person, size: 14, color: AppColors.textGrey),
+            ),
+            AppSizes.gapWSm,
+            Text(
+              'STUDYSWAP',
+              style: AppTextStyles.buttonText.copyWith(
+                color: AppColors.primaryBlue,
               ),
-              AppSizes.gapWSm,
-              Text('STUDYSWAP',
-                  style: AppTextStyles.buttonText
-                      .copyWith(color: AppColors.primaryBlue)),
-            ],
-          ),
-          actions: [
-            Container(
-              margin: const EdgeInsets.only(right: 16),
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.limeGreen,
-                border: Border.all(color: AppColors.solidBlack),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.notifications_none,
-                  color: AppColors.solidBlack, size: 20),
             ),
           ],
         ),
-        body: BlocBuilder<ProfileCubit, ProfileState>(
-          builder: (context, profileState) {
-            final user = profileState is ProfileLoaded
-                ? profileState.user
-                : AppUser.empty;
-            final name = user.fullName.toUpperCase();
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.limeGreen,
+              border: Border.all(color: AppColors.solidBlack),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.notifications_none,
+              color: AppColors.solidBlack,
+              size: 20,
+            ),
+          ),
+        ],
+      ),
+      body: BlocBuilder<ProfileCubit, ProfileState>(
+        builder: (context, profileState) {
+          final user = profileState is ProfileLoaded
+              ? profileState.user
+              : AppUser.empty;
+          final name = user.fullName.toUpperCase();
 
-            return BlocBuilder<MyListingsCubit, ListingState>(
-              builder: (context, listingState) {
-                final allListings = listingState is ListingLoaded
-                    ? listingState.listings
-                    : const <Listing>[];
-                final activeListings = allListings
-                    .where((l) => l.status != ListingStatus.sold)
-                    .toList();
-                final soldListings = allListings
-                    .where((l) => l.status == ListingStatus.sold)
-                    .toList();
+          return BlocBuilder<MyListingsCubit, ListingState>(
+            builder: (context, listingState) {
+              final allListings = listingState is ListingLoaded
+                  ? listingState.listings
+                  : const <Listing>[];
+              final activeListings = allListings
+                  .where((l) => l.status != ListingStatus.sold)
+                  .toList();
+              final soldListings = allListings
+                  .where((l) => l.status == ListingStatus.sold)
+                  .toList();
 
-                return NestedScrollView(
-                  headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSizes.md),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AppSizes.gapHLG,
-                            _buildProfileCard(name, user),
-                            AppSizes.gapHLG,
-                            _buildStatsRow(activeListings.length,
-                                soldListings.length, user),
-                            AppSizes.gapHLG,
-                          ],
-                        ),
+              return NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSizes.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AppSizes.gapHLG,
+                          _buildProfileCard(name, user),
+                          AppSizes.gapHLG,
+                          _buildStatsRow(
+                            activeListings.length,
+                            soldListings.length,
+                            user,
+                          ),
+                          AppSizes.gapHLG,
+                        ],
                       ),
                     ),
-                    SliverPersistentHeader(
-                      pinned: true,
-                      delegate: _TabBarDelegate(
-                        TabBar(
-                          controller: _tabController,
-                          labelColor: AppColors.primaryBlue,
-                          unselectedLabelColor: AppColors.textGrey,
-                          indicatorColor: AppColors.primaryBlue,
-                          indicatorWeight: 3,
-                          labelStyle: AppTextStyles.buttonText.copyWith(fontSize: 12),
-                          tabs: [
-                            Tab(text: 'ACTIVE (${activeListings.length})'),
-                            Tab(text: 'SOLD (${soldListings.length})'),
-                            Tab(text: 'REVIEWS (${_reviews.length})'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                  body: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildListingsGrid(activeListings, isLoading: listingState is ListingLoading),
-                      _buildListingsGrid(soldListings, isSold: true, isLoading: listingState is ListingLoading),
-                      _buildReviewsList(),
-                    ],
                   ),
-                );
-              },
-            );
-          },
-        ),
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _TabBarDelegate(
+                      TabBar(
+                        controller: _tabController,
+                        labelColor: AppColors.primaryBlue,
+                        unselectedLabelColor: AppColors.textGrey,
+                        indicatorColor: AppColors.primaryBlue,
+                        indicatorWeight: 3,
+                        labelStyle: AppTextStyles.buttonText.copyWith(
+                          fontSize: 12,
+                        ),
+                        tabs: [
+                          Tab(text: 'ACTIVE (${activeListings.length})'),
+                          Tab(text: 'SOLD (${soldListings.length})'),
+                          Tab(text: 'REVIEWS (${_reviews.length})'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                body: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildListingsGrid(
+                      activeListings,
+                      isLoading: listingState is ListingLoading,
+                    ),
+                    _buildListingsGrid(
+                      soldListings,
+                      isSold: true,
+                      isLoading: listingState is ListingLoading,
+                    ),
+                    _buildReviewsList(),
+                  ],
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
@@ -207,7 +220,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.only(top: 64, left: 16, right: 16, bottom: 24),
+          padding: const EdgeInsets.only(
+            top: 64,
+            left: 16,
+            right: 16,
+            bottom: 24,
+          ),
           decoration: BoxDecoration(
             color: AppColors.white,
             borderRadius: BorderRadius.circular(24),
@@ -226,7 +244,10 @@ class _ProfileScreenState extends State<ProfileScreen>
               AppSizes.gapHSm,
               // University badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFE0E7FF),
                   borderRadius: BorderRadius.circular(8),
@@ -235,12 +256,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.school_outlined,
-                        color: AppColors.primaryBlue, size: 14),
+                    const Icon(
+                      Icons.school_outlined,
+                      color: AppColors.primaryBlue,
+                      size: 14,
+                    ),
                     const SizedBox(width: 6),
-                    Text(user.university,
-                        style: AppTextStyles.bodyMediumDark
-                            .copyWith(color: AppColors.primaryBlue, fontSize: 12)),
+                    Text(
+                      user.university,
+                      style: AppTextStyles.bodyMediumDark.copyWith(
+                        color: AppColors.primaryBlue,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -252,8 +280,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.calendar_today_outlined,
-                        size: 12, color: AppColors.textGrey),
+                    const Icon(
+                      Icons.calendar_today_outlined,
+                      size: 12,
+                      color: AppColors.textGrey,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Joined ${DateFormat('MMMM yyyy').format(joinDate)}',
@@ -271,13 +302,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                     foregroundColor: AppColors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     side: const BorderSide(
-                        color: AppColors.solidBlack, width: 1.5),
+                      color: AppColors.solidBlack,
+                      width: 1.5,
+                    ),
                   ),
                   icon: const Icon(Icons.edit, size: 16),
-                  label: Text('EDIT PROFILE',
-                      style: AppTextStyles.buttonTextWhite),
+                  label: Text(
+                    'EDIT PROFILE',
+                    style: AppTextStyles.buttonTextWhite,
+                  ),
                 ),
               ),
               AppSizes.gapHSm,
@@ -290,15 +326,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                     side: const BorderSide(color: Colors.red, width: 1.5),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   icon: const Icon(Icons.logout, size: 16),
-                  label: Text('LOG OUT',
-                      style: AppTextStyles.buttonText
-                          .copyWith(color: Colors.red)),
+                  label: Text(
+                    'LOG OUT',
+                    style: AppTextStyles.buttonText.copyWith(color: Colors.red),
+                  ),
                 ),
               ),
-              
+
               // Moderation Dashboard (only for moderators — see [_isModerator])
               if (_isModerator) ...[
                 AppSizes.gapHSm,
@@ -311,13 +349,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                       foregroundColor: AppColors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       side: const BorderSide(
-                          color: AppColors.solidBlack, width: 1.5),
+                        color: AppColors.solidBlack,
+                        width: 1.5,
+                      ),
                     ),
                     icon: const Icon(Icons.admin_panel_settings, size: 16),
-                    label: Text('MODERATION DASHBOARD',
-                        style: AppTextStyles.buttonTextWhite),
+                    label: Text(
+                      'MODERATION DASHBOARD',
+                      style: AppTextStyles.buttonTextWhite,
+                    ),
                   ),
                 ),
               ],
@@ -337,14 +380,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.solidBlack, width: 2),
                 ),
-                child:
-                    const Icon(Icons.person, size: 40, color: AppColors.textGrey),
+                child: const Icon(
+                  Icons.person,
+                  size: 40,
+                  color: AppColors.textGrey,
+                ),
               ),
               Transform.translate(
                 offset: const Offset(0, -10),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF4C7500),
                     borderRadius: BorderRadius.circular(12),
@@ -352,13 +400,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.verified,
-                          color: AppColors.white, size: 10),
+                      const Icon(
+                        Icons.verified,
+                        color: AppColors.white,
+                        size: 10,
+                      ),
                       const SizedBox(width: 4),
-                      Text('Verified\nStudent',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.white, fontSize: 8),
-                          textAlign: TextAlign.center),
+                      Text(
+                        'Verified\nStudent',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.white,
+                          fontSize: 8,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ],
                   ),
                 ),
@@ -376,25 +431,44 @@ class _ProfileScreenState extends State<ProfileScreen>
     return Row(
       children: [
         Expanded(
-            child: _buildStatCard(
-                '$activeCount', 'Active\nListings', AppColors.primaryBlue,
-                Icons.storefront_outlined)),
+          child: _buildStatCard(
+            '$activeCount',
+            'Active\nListings',
+            AppColors.primaryBlue,
+            Icons.storefront_outlined,
+          ),
+        ),
         const SizedBox(width: 8),
         Expanded(
-            child: _buildStatCard(
-                '$soldCount', 'Items\nSold', AppColors.limeGreen,
-                Icons.handshake_outlined, dark: true)),
+          child: _buildStatCard(
+            '$soldCount',
+            'Items\nSold',
+            AppColors.limeGreen,
+            Icons.handshake_outlined,
+            dark: true,
+          ),
+        ),
         const SizedBox(width: 8),
         Expanded(
-            child: _buildStatCard(
-                user.formattedRating, '${user.ratingCount} Reviews',
-                AppColors.primaryYellow, Icons.star_rounded, dark: true)),
+          child: _buildStatCard(
+            user.formattedRating,
+            '${user.ratingCount} Reviews',
+            AppColors.primaryYellow,
+            Icons.star_rounded,
+            dark: true,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildStatCard(String value, String label, Color color, IconData icon,
-      {bool dark = false}) {
+  Widget _buildStatCard(
+    String value,
+    String label,
+    Color color,
+    IconData icon, {
+    bool dark = false,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       decoration: BoxDecoration(
@@ -414,17 +488,23 @@ class _ProfileScreenState extends State<ProfileScreen>
               shape: BoxShape.circle,
               border: Border.all(color: AppColors.solidBlack, width: 1.5),
             ),
-            child: Icon(icon,
-                color: dark ? AppColors.solidBlack : AppColors.white, size: 18),
+            child: Icon(
+              icon,
+              color: dark ? AppColors.solidBlack : AppColors.white,
+              size: 18,
+            ),
           ),
           const SizedBox(height: 8),
-          Text(value,
-              style: AppTextStyles.heading2.copyWith(fontSize: 20),
-              textAlign: TextAlign.center),
-          Text(label,
-              style: AppTextStyles.bodyMedium
-                  .copyWith(fontSize: 10, height: 1.2),
-              textAlign: TextAlign.center),
+          Text(
+            value,
+            style: AppTextStyles.heading2.copyWith(fontSize: 20),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            label,
+            style: AppTextStyles.bodyMedium.copyWith(fontSize: 10, height: 1.2),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -432,8 +512,11 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // ── Listings Grid ─────────────────────────────────────────────────────────
 
-  Widget _buildListingsGrid(List<Listing> listings,
-      {bool isSold = false, bool isLoading = false}) {
+  Widget _buildListingsGrid(
+    List<Listing> listings, {
+    bool isSold = false,
+    bool isLoading = false,
+  }) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -494,34 +577,41 @@ class _ProfileScreenState extends State<ProfileScreen>
           // Image area
           Expanded(
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(14)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(14),
+              ),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  listing.imageUrl.isNotEmpty
-                      ? Image.network(listing.imageUrl, fit: BoxFit.cover,
-                          errorBuilder: (_, e, s) => _placeholderImage())
-                      : _placeholderImage(),
+                  ListingImage(
+                    url: listing.coverImageUrl,
+                    placeholderIconSize: 32,
+                    placeholderColor: AppColors.background,
+                  ),
                   // Status badge
                   Positioned(
                     top: 8,
                     right: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: statusColor,
                         borderRadius: BorderRadius.circular(4),
-                        border:
-                            Border.all(color: AppColors.solidBlack, width: 1),
+                        border: Border.all(
+                          color: AppColors.solidBlack,
+                          width: 1,
+                        ),
                       ),
                       child: Text(
                         listing.status.label.toUpperCase(),
                         style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w900),
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                   ),
@@ -535,37 +625,35 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(listing.title,
-                    style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                Text(
+                  listing.title,
+                  style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(listing.formattedPrice,
-                        style: AppTextStyles.heading2.copyWith(fontSize: 14,
-                            color: AppColors.primaryBlue)),
-                    Text(listing.categoryLabel,
-                        style: AppTextStyles.bodyMedium
-                            .copyWith(fontSize: 9),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      listing.formattedPrice,
+                      style: AppTextStyles.heading2.copyWith(
+                        fontSize: 14,
+                        color: AppColors.primaryBlue,
+                      ),
+                    ),
+                    Text(
+                      listing.categoryLabel,
+                      style: AppTextStyles.bodyMedium.copyWith(fontSize: 9),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _placeholderImage() {
-    return Container(
-      color: AppColors.background,
-      child: const Center(
-        child: Icon(Icons.image_outlined, size: 32, color: AppColors.borderGrey),
       ),
     );
   }
@@ -581,7 +669,11 @@ class _ProfileScreenState extends State<ProfileScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.star_outline, size: 48, color: AppColors.borderGrey),
+            const Icon(
+              Icons.star_outline,
+              size: 48,
+              color: AppColors.borderGrey,
+            ),
             const SizedBox(height: 12),
             Text('No reviews yet', style: AppTextStyles.bodyMedium),
           ],
@@ -629,14 +721,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
               ),
-              Text(date,
-                  style: AppTextStyles.bodyMedium.copyWith(fontSize: 10)),
+              Text(
+                date,
+                style: AppTextStyles.bodyMedium.copyWith(fontSize: 10),
+              ),
             ],
           ),
           if (review.hasComment) ...[
             const SizedBox(height: 8),
-            Text(review.comment,
-                style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 13)),
+            Text(
+              review.comment,
+              style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 13),
+            ),
           ],
         ],
       ),
@@ -657,7 +753,10 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(
-      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     return Container(
       color: AppColors.background,
       child: Column(

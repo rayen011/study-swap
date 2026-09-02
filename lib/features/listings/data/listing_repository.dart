@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/constants/listing_options.dart';
 import '../../../core/models/listing.dart';
+import '../../../core/models/listing_filter.dart';
 
 /// ListingRepository: Handles CRUD operations for Marketplace Listings in Firestore.
 class ListingRepository {
@@ -12,8 +13,17 @@ class ListingRepository {
   CollectionReference<Map<String, dynamic>> get _listings =>
       _firestore.collection('listings');
 
+  /// Reserves a document id without writing anything.
+  ///
+  /// Photos upload to a Storage path keyed by the listing id, so the id has to
+  /// exist before the document does.
+  String newListingId() => _listings.doc().id;
+
   /// Creates a new listing in Firestore.
-  Future<void> createListing(ListingDraft draft) async {
+  ///
+  /// Pass [listingId] to write to an id from [newListingId]; omit it and one
+  /// is generated here.
+  Future<void> createListing(ListingDraft draft, {String? listingId}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
       throw Exception('User must be logged in to create a listing');
@@ -22,7 +32,9 @@ class ListingRepository {
     final userDoc = await _firestore.collection('users').doc(uid).get();
     final sellerName = userDoc.data()?['fullName'] as String? ?? 'Student';
 
-    await _listings.add({
+    final ref = listingId == null ? _listings.doc() : _listings.doc(listingId);
+
+    await ref.set({
       ...draft.toMap(),
       'userId': uid,
       'sellerName': sellerName,
@@ -36,9 +48,44 @@ class ListingRepository {
     return _listings.doc(listingId).update({'status': status.wire});
   }
 
-  /// Streams all listings from Firestore, newest first.
-  Stream<List<Listing>> getListings() {
-    return _listings.snapshots().map(_toSortedListings);
+  /// How many listings one page of the feed holds.
+  static const int pageSize = 20;
+
+  /// Streams the marketplace feed for [filter], capped at [limit] documents.
+  ///
+  /// Pagination works by growing the window rather than by cursor. A cursor
+  /// would mean one subscription per page and merging their emissions by hand;
+  /// re-subscribing with a larger limit keeps the feed a single live query, and
+  /// Firestore serves the already-seen documents from cache. The cost is one
+  /// re-read of the window each time the user loads more, which at a 20-item
+  /// page is a fair trade for live updates.
+  Stream<List<Listing>> watchFeed({
+    required ListingFilter filter,
+    int limit = pageSize,
+  }) {
+    // Only active listings reach the feed. Sold, reserved and moderator-hidden
+    // ones are excluded by the server rather than downloaded and discarded.
+    Query<Map<String, dynamic>> query = _listings.where(
+      'status',
+      isEqualTo: ListingStatus.active.wire,
+    );
+
+    if (filter.category != null) {
+      query = query.where('category', isEqualTo: filter.category!.wire);
+    }
+    if (filter.condition != null) {
+      query = query.where('condition', isEqualTo: filter.condition!.wire);
+    }
+
+    return query
+        .orderBy(filter.sort.field, descending: filter.sort.descending)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((doc) => Listing.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
   }
 
   /// Streams listings for the signed-in user, newest first.
@@ -67,7 +114,12 @@ class ListingRepository {
     return Listing.fromDoc(doc);
   }
 
-  /// Deletes a listing from Firestore.
+  /// Deletes a listing.
+  ///
+  /// The photos go too, but not from here — `onListingDeleted` clears the
+  /// Storage folder. Server-side cleanup survives the app being killed
+  /// mid-delete, and means the client doesn't have to track how many images a
+  /// listing had just to remove them.
   Future<void> deleteListing(String listingId) {
     return _listings.doc(listingId).delete();
   }

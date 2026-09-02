@@ -44,10 +44,17 @@ class ModerationQueueScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.check_circle_outline, size: 64, color: AppColors.limeGreen),
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 64,
+                    color: AppColors.limeGreen,
+                  ),
                   AppSizes.gapHMD,
                   Text('All caught up!', style: AppTextStyles.heading2),
-                  Text('No pending reports to review.', style: AppTextStyles.bodyMedium),
+                  Text(
+                    'No pending reports to review.',
+                    style: AppTextStyles.bodyMedium,
+                  ),
                 ],
               ),
             );
@@ -93,7 +100,10 @@ class ModerationQueueScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: report.targetType.isUser
                         ? const Color(0xFFE0E7FF)
@@ -103,15 +113,20 @@ class ModerationQueueScreen extends StatelessWidget {
                   ),
                   child: Text(
                     report.targetType.label.toUpperCase(),
-                    style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 10, fontWeight: FontWeight.bold),
+                    style: AppTextStyles.bodyMediumDark.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 Text(dateStr, style: AppTextStyles.bodySmall),
               ],
             ),
             AppSizes.gapHMD,
-            Text(report.reason,
-                style: AppTextStyles.heading2.copyWith(fontSize: 16)),
+            Text(
+              report.reason,
+              style: AppTextStyles.heading2.copyWith(fontSize: 16),
+            ),
             if (report.hasNote) ...[
               AppSizes.gapHSm,
               Text(
@@ -133,7 +148,11 @@ class ModerationQueueScreen extends StatelessWidget {
                     fontSize: 12,
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: AppColors.primaryBlue, size: 18),
+                const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.primaryBlue,
+                  size: 18,
+                ),
               ],
             ),
           ],

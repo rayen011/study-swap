@@ -33,11 +33,17 @@ class FavoritesRepository {
     }
   }
 
+  /// Firestore's cap on values in a single `whereIn` clause.
+  static const int _whereInChunkSize = 30;
+
   /// Streams the list of favorite listings for the current user.
   ///
-  /// Each favourite is re-read from `listings` so the card reflects the
-  /// current price and status. That's one read per favourite per change —
-  /// batching it is tracked as a follow-up.
+  /// Only the listing id is stored on the favourite, so the listings are read
+  /// live — a favourited item shows its current price and status rather than
+  /// whatever it cost when it was saved.
+  ///
+  /// The reads are batched with `whereIn` in chunks of 30: 20 favourites cost
+  /// one query instead of twenty, and the chunks run concurrently.
   Stream<List<Listing>> getFavorites() {
     final favorites = _favorites;
     if (favorites == null) return Stream.value(const []);
@@ -46,17 +52,36 @@ class FavoritesRepository {
         .orderBy('favoritedAt', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
-          final listings = <Listing>[];
-          for (final favDoc in snapshot.docs) {
-            final listingDoc = await _firestore
-                .collection('listings')
-                .doc(favDoc.id)
-                .get();
-            final listing = Listing.fromDoc(listingDoc);
-            // Skip listings deleted since they were favourited.
-            if (listing != null) listings.add(listing);
-          }
-          return listings;
+          final ids = snapshot.docs.map((doc) => doc.id).toList();
+          if (ids.isEmpty) return const <Listing>[];
+
+          final chunks = <List<String>>[
+            for (var i = 0; i < ids.length; i += _whereInChunkSize)
+              ids.sublist(
+                i,
+                (i + _whereInChunkSize).clamp(0, ids.length),
+              ),
+          ];
+
+          final results = await Future.wait(
+            chunks.map(
+              (chunk) => _firestore
+                  .collection('listings')
+                  .where(FieldPath.documentId, whereIn: chunk)
+                  .get(),
+            ),
+          );
+
+          // whereIn doesn't preserve order, so index by id and rebuild in the
+          // order the favourites were saved.
+          final byId = {
+            for (final snap in results)
+              for (final doc in snap.docs)
+                doc.id: Listing.fromMap(doc.id, doc.data()),
+          };
+
+          // Listings deleted since they were favourited simply drop out.
+          return [for (final id in ids) ?byId[id]];
         });
   }
 

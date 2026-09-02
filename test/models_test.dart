@@ -59,6 +59,53 @@ void main() {
       expect(listing.status, ListingStatus.active);
     });
 
+    test('reads a multi-image listing in order', () {
+      final listing = Listing.fromMap('x', {
+        'imageUrls': ['https://a/0.jpg', 'https://a/1.jpg'],
+      });
+
+      expect(listing.hasImages, isTrue);
+      expect(listing.imageUrls.length, 2);
+      expect(listing.coverImageUrl, 'https://a/0.jpg');
+    });
+
+    test('falls back to the single imageUrl field on older listings', () {
+      // Listings written before multi-image support carry one `imageUrl`.
+      final listing = Listing.fromMap('legacy', {
+        'imageUrl': 'https://a/cover.jpg',
+      });
+
+      expect(listing.imageUrls, ['https://a/cover.jpg']);
+      expect(listing.coverImageUrl, 'https://a/cover.jpg');
+    });
+
+    test('treats an empty imageUrl as no photos', () {
+      // Every listing created before this feature has `imageUrl: ''`, and a
+      // blank string must not become a broken image widget.
+      final listing = Listing.fromMap('x', {'imageUrl': ''});
+
+      expect(listing.hasImages, isFalse);
+      expect(listing.imageUrls, isEmpty);
+      expect(listing.coverImageUrl, isNull);
+    });
+
+    test('drops blank entries from the image list', () {
+      final listing = Listing.fromMap('x', {
+        'imageUrls': ['', 'https://a/1.jpg', ''],
+      });
+
+      expect(listing.imageUrls, ['https://a/1.jpg']);
+    });
+
+    test('prefers imageUrls when a document carries both fields', () {
+      final listing = Listing.fromMap('x', {
+        'imageUrls': ['https://a/new.jpg'],
+        'imageUrl': 'https://a/old.jpg',
+      });
+
+      expect(listing.imageUrls, ['https://a/new.jpg']);
+    });
+
     test('isOwnedBy is false for a null uid', () {
       final listing = Listing.fromMap('x', {'userId': 'seller-1'});
 
@@ -97,9 +144,31 @@ void main() {
       final map = draft.toMap();
       expect(map['category'], 'study_summaries');
       expect(map['condition'], 'like_new');
+      expect(map['imageUrls'], isEmpty);
       // The repository owns these — a draft must not smuggle them in.
       expect(map.containsKey('userId'), isFalse);
       expect(map.containsKey('status'), isFalse);
+    });
+
+    test('withImageUrls carries every other field through', () {
+      const draft = ListingDraft(
+        title: 'Notes',
+        description: 'Lecture notes',
+        price: 5,
+        category: ListingCategory.studySummaries,
+        condition: ListingCondition.likeNew,
+        university: 'Oxford',
+      );
+
+      final uploaded = draft.withImageUrls(['https://a/0.jpg']);
+
+      expect(uploaded.imageUrls, ['https://a/0.jpg']);
+      expect(uploaded.title, draft.title);
+      expect(uploaded.description, draft.description);
+      expect(uploaded.price, draft.price);
+      expect(uploaded.category, draft.category);
+      expect(uploaded.condition, draft.condition);
+      expect(uploaded.university, draft.university);
     });
   });
 

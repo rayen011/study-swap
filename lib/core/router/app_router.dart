@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/onboarding/screens/landing_screen.dart';
+import '../../features/onboarding/screens/splash_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/signup_screen.dart';
 import '../../features/main/screens/main_screen.dart';
@@ -25,33 +26,64 @@ class AppRouter {
   AppRouter._();
 
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
-  static final _shellNavigatorHomeKey = GlobalKey<NavigatorState>(debugLabel: 'shellHome');
-  static final _shellNavigatorListingsKey = GlobalKey<NavigatorState>(debugLabel: 'shellListings');
-  static final _shellNavigatorSellKey = GlobalKey<NavigatorState>(debugLabel: 'shellSell');
-  static final _shellNavigatorChatKey = GlobalKey<NavigatorState>(debugLabel: 'shellChat');
-  static final _shellNavigatorProfileKey = GlobalKey<NavigatorState>(debugLabel: 'shellProfile');
+  static final _shellNavigatorHomeKey = GlobalKey<NavigatorState>(
+    debugLabel: 'shellHome',
+  );
+  static final _shellNavigatorListingsKey = GlobalKey<NavigatorState>(
+    debugLabel: 'shellListings',
+  );
+  static final _shellNavigatorSellKey = GlobalKey<NavigatorState>(
+    debugLabel: 'shellSell',
+  );
+  static final _shellNavigatorChatKey = GlobalKey<NavigatorState>(
+    debugLabel: 'shellChat',
+  );
+  static final _shellNavigatorProfileKey = GlobalKey<NavigatorState>(
+    debugLabel: 'shellProfile',
+  );
+
+  /// Reachable without a session. Everything else redirects to `/login`.
+  static const Set<String> _publicRoutes = {'/', '/login', '/signup'};
+
+  static const String _splash = '/splash';
 
   static GoRouter createRouter(AuthCubit authCubit) {
     return GoRouter(
-      initialLocation: '/',
+      initialLocation: _splash,
       navigatorKey: _rootNavigatorKey,
       refreshListenable: GoRouterRefreshStream(authCubit.stream),
       redirect: (context, state) {
         final authState = authCubit.state;
-        final bool isAuth = authState is Authenticated;
-        final bool isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/signup' || state.matchedLocation == '/';
+        final location = state.matchedLocation;
+
+        // AuthInitial means Firebase hasn't finished restoring the session
+        // yet. Hold on the splash rather than flashing the landing page.
+        // AuthLoading is a sign-in already in progress and must NOT land here,
+        // or the user gets bounced off the form mid-login.
+        if (authState is AuthInitial) {
+          return location == _splash ? null : _splash;
+        }
+
+        final isAuth = authState is Authenticated;
+        final isPublic = _publicRoutes.contains(location);
 
         if (!isAuth) {
-          return null; // Let the user go to landing/login/signup
+          // Leaving the splash with no session means a first run: send them
+          // to the onboarding flow, not straight to the login form.
+          if (location == _splash) return '/';
+          // A deep link or hot restart onto a protected route lands here.
+          return isPublic ? null : '/login';
         }
 
-        if (isLoggingIn) {
-          return '/home';
-        }
+        if (isPublic || location == _splash) return '/home';
 
         return null;
       },
       routes: [
+        GoRoute(
+          path: _splash,
+          builder: (context, state) => const SplashScreen(),
+        ),
         GoRoute(
           path: '/',
           builder: (context, state) => const LandingScreen(),
@@ -116,7 +148,7 @@ class AppRouter {
             );
           },
         ),
-        
+
         // Stateful navigation shell for BottomNavigationBar
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) {
@@ -190,11 +222,26 @@ class AppRouter {
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
         switch (transitionType) {
           case 'scale':
-            return PageTransitions.scale(context, animation, secondaryAnimation, child);
+            return PageTransitions.scale(
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            );
           case 'slideUp':
-            return PageTransitions.slideUp(context, animation, secondaryAnimation, child);
+            return PageTransitions.slideUp(
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            );
           default:
-            return PageTransitions.slideFade(context, animation, secondaryAnimation, child);
+            return PageTransitions.slideFade(
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            );
         }
       },
     );
@@ -206,8 +253,8 @@ class GoRouterRefreshStream extends ChangeNotifier {
   GoRouterRefreshStream(Stream<dynamic> stream) {
     notifyListeners();
     _subscription = stream.asBroadcastStream().listen(
-          (dynamic _) => notifyListeners(),
-        );
+      (dynamic _) => notifyListeners(),
+    );
   }
 
   late final dynamic _subscription;

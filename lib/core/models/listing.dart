@@ -16,7 +16,7 @@ class Listing extends Equatable {
     required this.university,
     required this.userId,
     required this.sellerName,
-    required this.imageUrl,
+    required this.imageUrls,
     required this.status,
     required this.createdAt,
   });
@@ -35,7 +35,10 @@ class Listing extends Equatable {
   final String university;
   final String userId;
   final String sellerName;
-  final String imageUrl;
+
+  /// Download URLs in display order; the first is the cover image.
+  final List<String> imageUrls;
+
   final ListingStatus status;
 
   /// Null while the server timestamp is still pending on a just-written doc.
@@ -52,7 +55,7 @@ class Listing extends Equatable {
       university: asString(data['university']),
       userId: asString(data['userId']),
       sellerName: asString(data['sellerName'], fallback: 'Student'),
-      imageUrl: asString(data['imageUrl']),
+      imageUrls: _readImageUrls(data),
       status: ListingStatus.fromWire(data['status']),
       createdAt: asDate(data['createdAt']),
     );
@@ -63,6 +66,23 @@ class Listing extends Equatable {
     final data = doc.data();
     return data == null ? null : Listing.fromMap(doc.id, data);
   }
+
+  /// Reads the image list, falling back to the single `imageUrl` field that
+  /// listings written before multi-image support still carry.
+  static List<String> _readImageUrls(Map<String, dynamic> data) {
+    final urls = asStringList(
+      data['imageUrls'],
+    ).where((url) => url.isNotEmpty).toList();
+    if (urls.isNotEmpty) return urls;
+
+    final legacy = asString(data['imageUrl']);
+    return legacy.isEmpty ? const [] : [legacy];
+  }
+
+  bool get hasImages => imageUrls.isNotEmpty;
+
+  /// The image to show on a card, or null when the listing has no photos.
+  String? get coverImageUrl => imageUrls.isEmpty ? null : imageUrls.first;
 
   /// The label to render for the category, never blank.
   String get categoryLabel => (category ?? ListingCategory.other).label;
@@ -87,7 +107,7 @@ class Listing extends Equatable {
     university,
     userId,
     sellerName,
-    imageUrl,
+    imageUrls,
     status,
     createdAt,
   ];
@@ -105,7 +125,7 @@ class ListingDraft {
     required this.category,
     required this.condition,
     required this.university,
-    this.imageUrl = '',
+    this.imageUrls = const [],
   });
 
   final String title;
@@ -114,7 +134,7 @@ class ListingDraft {
   final ListingCategory category;
   final ListingCondition condition;
   final String university;
-  final String imageUrl;
+  final List<String> imageUrls;
 
   /// The document body, minus the fields the repository fills in.
   Map<String, dynamic> toMap() => {
@@ -124,6 +144,18 @@ class ListingDraft {
     'category': category.wire,
     'condition': condition.wire,
     'university': university,
-    'imageUrl': imageUrl,
+    'imageUrls': imageUrls,
   };
+
+  /// Returns a copy carrying the URLs produced by the image upload, which
+  /// only exist after the files have been sent to Cloud Storage.
+  ListingDraft withImageUrls(List<String> urls) => ListingDraft(
+    title: title,
+    description: description,
+    price: price,
+    category: category,
+    condition: condition,
+    university: university,
+    imageUrls: urls,
+  );
 }

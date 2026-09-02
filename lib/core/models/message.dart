@@ -7,7 +7,8 @@ enum DealStatus {
   pending('pending'),
   accepted('accepted'),
   declined('declined'),
-  completed('completed');
+  completed('completed')
+  ;
 
   const DealStatus(this.wire);
 

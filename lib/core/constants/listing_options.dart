@@ -13,7 +13,8 @@ enum ListingCategory {
   electronics('electronics', 'Electronics'),
   stationery('stationery', 'Stationery'),
   housing('housing', 'Housing'),
-  other('other', 'Other');
+  other('other', 'Other')
+  ;
 
   const ListingCategory(this.wire, this.label);
 
@@ -45,7 +46,8 @@ enum ListingStatus {
   sold('sold'),
 
   /// Taken down by a moderator.
-  hidden('hidden');
+  hidden('hidden')
+  ;
 
   const ListingStatus(this.wire);
 
@@ -77,12 +79,35 @@ enum ListingStatus {
   };
 }
 
+/// How the marketplace feed is ordered.
+///
+/// Each value maps to a Firestore `orderBy`, so adding one here means adding
+/// its composite indexes to `firestore.indexes.json`.
+enum ListingSort {
+  newest('createdAt', descending: true, label: 'Newest'),
+  cheapest('price', descending: false, label: 'Cheapest'),
+  mostExpensive('price', descending: true, label: 'Most Expensive')
+  ;
+
+  const ListingSort(
+    this.field, {
+    required this.descending,
+    required this.label,
+  });
+
+  /// The document field to order by.
+  final String field;
+  final bool descending;
+  final String label;
+}
+
 /// The physical condition of a listed item.
 enum ListingCondition {
   likeNew('like_new', 'Like New'),
   good('good', 'Good'),
   fair('fair', 'Fair'),
-  poor('poor', 'Poor');
+  poor('poor', 'Poor')
+  ;
 
   const ListingCondition(this.wire, this.label);
 

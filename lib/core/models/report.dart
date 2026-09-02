@@ -6,7 +6,8 @@ import 'firestore_parsing.dart';
 /// What a report is about.
 enum ReportTargetType {
   user('user'),
-  listing('listing');
+  listing('listing')
+  ;
 
   const ReportTargetType(this.wire);
 
@@ -27,7 +28,8 @@ enum ReportTargetType {
 enum ReportStatus {
   pending('pending'),
   reviewed('reviewed'),
-  dismissed('dismissed');
+  dismissed('dismissed')
+  ;
 
   const ReportStatus(this.wire);
 

@@ -46,7 +46,11 @@ class CustomButton extends StatelessWidget {
         Text(
           text,
           style: _getTextStyle().copyWith(
-            color: textColor ?? (isDisabled ? _getTextStyle().color?.withValues(alpha: 0.5) : _getTextStyle().color),
+            color:
+                textColor ??
+                (isDisabled
+                    ? _getTextStyle().color?.withValues(alpha: 0.5)
+                    : _getTextStyle().color),
           ),
         ),
         if (trailingIcon != null) ...[
@@ -93,9 +97,10 @@ class CustomButton extends StatelessWidget {
       case ButtonType.solid:
         return Container(
           decoration: BoxDecoration(
-            color: isDisabled 
-              ? (backgroundColor?.withValues(alpha: 0.5) ?? AppColors.primaryBlue.withValues(alpha: 0.5)) 
-              : (backgroundColor ?? AppColors.primaryBlue),
+            color: isDisabled
+                ? (backgroundColor?.withValues(alpha: 0.5) ??
+                      AppColors.primaryBlue.withValues(alpha: 0.5))
+                : (backgroundColor ?? AppColors.primaryBlue),
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
@@ -106,7 +111,9 @@ class CustomButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.transparent,
             border: Border.all(
-              color: AppColors.primaryBlue.withValues(alpha: isDisabled ? 0.5 : 1.0),
+              color: AppColors.primaryBlue.withValues(
+                alpha: isDisabled ? 0.5 : 1.0,
+              ),
               width: 1.5,
             ),
             borderRadius: BorderRadius.circular(12),
