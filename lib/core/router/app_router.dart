@@ -17,6 +17,8 @@ import '../../features/report/screens/report_details_screen.dart';
 import '../../features/auth/logic/auth_cubit.dart';
 import '../../features/auth/logic/auth_state.dart';
 import '../animations/app_animations.dart';
+import '../models/listing.dart';
+import '../models/report.dart';
 
 /// AppRouter: Centralized routing configuration using GoRouter.
 class AppRouter {
@@ -66,7 +68,7 @@ class AppRouter {
           path: '/item-details',
           parentNavigatorKey: _rootNavigatorKey,
           pageBuilder: (context, state) {
-            final listing = state.extra as Map<String, dynamic>;
+            final listing = state.extra as Listing;
             return _buildTransitionPage(
               child: ItemDetailsScreen(listing: listing),
               state: state,
@@ -86,12 +88,12 @@ class AppRouter {
           path: '/chat-details',
           parentNavigatorKey: _rootNavigatorKey,
           pageBuilder: (context, state) {
-            final extra = state.extra as Map<String, dynamic>;
+            final args = state.extra as ChatDetailsArgs;
             return _buildTransitionPage(
               child: ChatDetailsScreen(
-                chatId: extra['chatId'],
-                receiverName: extra['receiverName'],
-                receiverId: extra['receiverId'],
+                chatId: args.chatId,
+                receiverName: args.receiverName,
+                receiverId: args.receiverId,
               ),
               state: state,
               transitionType: 'slideUp',
@@ -108,8 +110,10 @@ class AppRouter {
           parentNavigatorKey: _rootNavigatorKey,
           builder: (context, state) {
             final reportId = state.pathParameters['id']!;
-            final initialData = state.extra as Map<String, dynamic>?;
-            return ReportDetailsScreen(reportId: reportId, initialData: initialData);
+            return ReportDetailsScreen(
+              reportId: reportId,
+              initialReport: state.extra as Report?,
+            );
           },
         ),
         

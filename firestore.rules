@@ -1,0 +1,312 @@
+rules_version = '2';
+
+// StudySwap security rules.
+//
+// Deploy with:  firebase deploy --only firestore:rules,firestore:indexes
+//
+// Moderators are identified by a custom auth claim, NOT by a field in their
+// own user document (a client-written field is not an authorization decision).
+// Grant it from a trusted environment, e.g.:
+//
+//   admin.auth().setCustomUserClaims(uid, { role: 'moderator' })
+//
+// The user must sign out and back in (or call getIdToken(true)) for a new
+// claim to appear in their token.
+//
+// KNOWN INTERIM COMPROMISE: rating / dealCount / title aggregates are still
+// written by the client, because the app computes them in a Firestore
+// transaction. The rules below bound those writes hard — one review per deal,
+// counters may only step by exactly one, ratings must stay in [0,5], and the
+// title must match the value its deal count implies — but the correct fix is
+// a Cloud Function that owns these fields and denies clients entirely. See
+// `isRatingAggregateUpdate` and `isDealAggregateUpdate`.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Identity helpers ──────────────────────────────────────────────────
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && uid() == userId;
+    }
+
+    function isModerator() {
+      return signedIn()
+        && 'role' in request.auth.token
+        && request.auth.token.role == 'moderator';
+    }
+
+    function userDoc(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+
+    // A suspended account keeps its token but loses the ability to write.
+    function notSuspended() {
+      return signedIn() && (
+        !exists(/databases/$(database)/documents/users/$(uid())) ||
+        !('isSuspended' in userDoc(uid())) ||
+        userDoc(uid()).isSuspended != true
+      );
+    }
+
+    // ── Diff helpers ──────────────────────────────────────────────────────
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanged(allowed) {
+      return changedKeys().hasOnly(allowed);
+    }
+
+    // Mirrors RatingRepository.getTitleForDeals — change both together.
+    function titleForDeals(deals) {
+      return deals >= 31 ? 'Campus Pro'
+           : (deals >= 16 ? 'Deal Maker'
+           : (deals >= 8  ? 'Trade Regular'
+           : (deals >= 3  ? 'Campus Seller'
+           : 'Freshman Trader')));
+    }
+
+    // ── users ─────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      // Every signed-in user can read profiles: seller cards, chat headers and
+      // the reviews tab all need them.
+      allow read: if signedIn();
+
+      allow create: if isSelf(userId)
+        && request.resource.data.keys().hasOnly([
+             'fullName', 'email', 'university', 'rating', 'ratingCount',
+             'dealCount', 'title', 'role', 'createdAt'
+           ])
+        // A new account can never mint its own privileges or reputation.
+        && request.resource.data.role == 'user'
+        && request.resource.data.rating == 0
+        && request.resource.data.ratingCount == 0
+        && request.resource.data.dealCount == 0
+        && request.resource.data.title == 'Freshman Trader'
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() > 0
+        && request.resource.data.fullName.size() <= 80
+        && request.resource.data.university is string
+        && request.resource.data.university.size() <= 120;
+
+      // The owner may edit only what the Edit Profile screen exposes.
+      function isProfileEdit() {
+        return isSelf(userId)
+          && onlyChanged(['fullName', 'university'])
+          && request.resource.data.fullName is string
+          && request.resource.data.fullName.size() > 0
+          && request.resource.data.fullName.size() <= 80
+          && request.resource.data.university is string
+          && request.resource.data.university.size() <= 120;
+      }
+
+      // Written by the *other* party when they submit a review.
+      function isRatingAggregateUpdate() {
+        return signedIn()
+          && uid() != userId
+          && onlyChanged(['rating', 'ratingCount'])
+          && request.resource.data.ratingCount == resource.data.ratingCount + 1
+          && request.resource.data.rating is number
+          && request.resource.data.rating >= 0
+          && request.resource.data.rating <= 5;
+      }
+
+      // Written by the seller when a deal is marked complete — for both
+      // parties. The title must be exactly what the new count implies.
+      function isDealAggregateUpdate() {
+        return signedIn()
+          && onlyChanged(['dealCount', 'title'])
+          && request.resource.data.dealCount == resource.data.dealCount + 1
+          && request.resource.data.title ==
+               titleForDeals(request.resource.data.dealCount);
+      }
+
+      function isModerationUpdate() {
+        return isModerator() && onlyChanged(['isSuspended', 'suspendedAt']);
+      }
+
+      // `role` appears in no allowed shape, so no client can ever change it.
+      allow update: if isProfileEdit()
+        || isRatingAggregateUpdate()
+        || isDealAggregateUpdate()
+        || isModerationUpdate();
+
+      allow delete: if false;
+
+      match /favorites/{listingId} {
+        allow read, write: if isSelf(userId);
+      }
+    }
+
+    // ── listings ──────────────────────────────────────────────────────────
+
+    match /listings/{listingId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn() && notSuspended()
+        && request.resource.data.userId == uid()
+        && request.resource.data.status == 'active'
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 2000
+        && request.resource.data.price is number
+        && request.resource.data.price >= 0
+        && request.resource.data.price <= 99999
+        && request.resource.data.category is string
+        && request.resource.data.condition is string;
+
+      function isOwnerEdit() {
+        return signedIn()
+          && resource.data.userId == uid()
+          && request.resource.data.userId == resource.data.userId
+          && onlyChanged([
+               'title', 'description', 'price', 'category', 'condition',
+               'university', 'imageUrl', 'status'
+             ])
+          && request.resource.data.price is number
+          && request.resource.data.price >= 0
+          && request.resource.data.price <= 99999
+          && request.resource.data.status in ['active', 'reserved', 'sold'];
+      }
+
+      // Moderators can only hide, never edit content.
+      function isModerationHide() {
+        return isModerator()
+          && onlyChanged(['status'])
+          && request.resource.data.status in ['hidden', 'active'];
+      }
+
+      allow update: if isOwnerEdit() || isModerationHide();
+
+      allow delete: if (signedIn() && resource.data.userId == uid())
+        || isModerator();
+    }
+
+    // ── chats ─────────────────────────────────────────────────────────────
+
+    match /chats/{chatId} {
+      function isParticipant() {
+        return signedIn() && uid() in resource.data.participants;
+      }
+
+      allow read: if isParticipant();
+
+      allow create: if signedIn() && notSuspended()
+        && uid() in request.resource.data.participants
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.lastMessage == ''
+        // The id is the sorted participant pair, so nobody can seed a chat
+        // document at an id the two members would never derive.
+        && chatId == request.resource.data.participants[0] + '_'
+                   + request.resource.data.participants[1];
+
+      allow update: if isParticipant() && notSuspended()
+        && request.resource.data.participants == resource.data.participants
+        && onlyChanged([
+             'lastMessage', 'lastTimestamp', 'lastSenderId', 'unreadCount'
+           ]);
+
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        function chatMembers() {
+          return get(/databases/$(database)/documents/chats/$(chatId))
+                 .data.participants;
+        }
+
+        function inChat() {
+          return signedIn() && uid() in chatMembers();
+        }
+
+        allow read: if inChat();
+
+        allow create: if inChat() && notSuspended()
+          && request.resource.data.senderId == uid()
+          && request.resource.data.receiverId != uid()
+          && request.resource.data.receiverId in chatMembers()
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 4000;
+
+        // A message is immutable except for the status of a deal attached to
+        // it, which either party may advance.
+        allow update: if inChat()
+          && onlyChanged(['dealData'])
+          && request.resource.data.dealData
+               .diff(resource.data.dealData).affectedKeys().hasOnly(['status'])
+          && request.resource.data.dealData.status
+               in ['pending', 'accepted', 'declined', 'completed'];
+
+        allow delete: if false;
+      }
+    }
+
+    // ── reviews ───────────────────────────────────────────────────────────
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+
+      // The deterministic id is what makes "one review per deal" enforceable:
+      // a second review for the same chat and pair collides with this id, and
+      // updates are denied outright.
+      allow create: if signedIn() && notSuspended()
+        && request.resource.data.fromId == uid()
+        && request.resource.data.toId is string
+        && request.resource.data.toId != uid()
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 1000
+        && request.resource.data.chatId is string
+        && reviewId == 'review_' + request.resource.data.chatId + '_'
+                     + uid() + '_' + request.resource.data.toId;
+
+      allow update, delete: if false;
+    }
+
+    // ── reports ───────────────────────────────────────────────────────────
+
+    match /reports/{reportId} {
+      // Only moderators may list the queue. A reporter can still read back
+      // their own report by id.
+      allow read: if isModerator()
+        || (signedIn() && resource.data.reporterId == uid());
+
+      allow create: if signedIn() && notSuspended()
+        && request.resource.data.reporterId == uid()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.targetType in ['user', 'listing']
+        && request.resource.data.targetId is string
+        && request.resource.data.targetId.size() > 0
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() > 0
+        && request.resource.data.additionalNote is string
+        && request.resource.data.additionalNote.size() <= 1000;
+
+      allow update: if isModerator()
+        && onlyChanged(['status', 'actionTaken', 'resolvedAt', 'moderatorId'])
+        && request.resource.data.status in ['reviewed', 'dismissed'];
+
+      allow delete: if false;
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

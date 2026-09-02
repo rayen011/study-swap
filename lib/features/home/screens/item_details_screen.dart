@@ -1,6 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/app_user.dart';
+import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -9,15 +11,18 @@ import '../../../core/widgets/custom_button.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../chat/data/chat_repository.dart';
+import '../../chat/screens/chat_details_screen.dart';
 import '../../favorites/logic/favorites_cubit.dart';
 import '../../favorites/data/favorites_repository.dart';
+import '../../listings/data/listing_repository.dart';
+import '../../profile/data/user_repository.dart';
 import '../../../core/animations/app_animations.dart';
 import '../../../core/widgets/user_title_badge.dart';
 import '../../report/widgets/report_dialog.dart';
 
 /// ItemDetailsScreen: Displays full details of a listing.
 class ItemDetailsScreen extends StatefulWidget {
-  final Map<String, dynamic> listing;
+  final Listing listing;
 
   const ItemDetailsScreen({super.key, required this.listing});
 
@@ -27,7 +32,7 @@ class ItemDetailsScreen extends StatefulWidget {
 
 class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   bool _isCreatingChat = false;
-  Map<String, dynamic>? _sellerData;
+  AppUser? _sellerData;
 
   @override
   void initState() {
@@ -36,25 +41,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   }
 
   Future<void> _fetchSellerData() async {
+    final userRepository = context.read<UserRepository>();
     try {
-      final sellerId = widget.listing['userId'];
-      if (sellerId != null) {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(sellerId)
-            .get();
-        if (mounted) {
-          setState(() {
-            _sellerData = doc.data();
-          });
-        }
-      }
-    } catch (e) {
-      // Error handling
+      final seller = await userRepository.getUser(widget.listing.userId);
+      if (mounted) setState(() => _sellerData = seller);
+    } catch (_) {
+      // The seller card falls back to the name stored on the listing.
     }
   }
 
-  Future<void> _showSafetyPopup() async {
+  Future<void> _showSafetyPopup(Listing listing) async {
     return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -115,7 +111,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              _initiateDeal();
+              _initiateDeal(listing);
             },
             child: const Text('I UNDERSTAND'),
           ),
@@ -139,80 +135,78 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     );
   }
 
-  Future<void> _initiateDeal() async {
+  Future<void> _initiateDeal(Listing listing) async {
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    final sellerId = widget.listing['userId'];
-    final sellerName = _sellerData?['fullName'] ?? 'Student';
-
     if (currentUserId == null) return;
+
+    final sellerId = listing.userId;
+    final sellerName = _sellerData?.fullName ?? listing.sellerName;
+    final chatRepo = context.read<ChatRepository>();
+    final messenger = ScaffoldMessenger.of(context);
 
     setState(() => _isCreatingChat = true);
 
     try {
-      final chatRepo = context.read<ChatRepository>();
       final chatId = await chatRepo.getOrCreateChat(sellerId, sellerName);
 
-      // Send Deal Request message
-      await chatRepo.sendDealRequest(chatId, sellerId, widget.listing);
+      // Don't stack a second request on top of one the seller hasn't
+      // answered yet — just take the buyer back to the conversation.
+      final alreadyOpen = await chatRepo.hasOpenDeal(chatId, listing.id);
+      if (!alreadyOpen) {
+        await chatRepo.sendDealRequest(chatId, sellerId, listing);
+      }
 
       if (mounted) {
+        if (alreadyOpen) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('You already have an open deal on this item.'),
+            ),
+          );
+        }
         context.push(
           '/chat-details',
-          extra: {
-            'chatId': chatId,
-            'receiverName': sellerName,
-            'receiverId': sellerId,
-          },
+          extra: ChatDetailsArgs(
+            chatId: chatId,
+            receiverName: sellerName,
+            receiverId: sellerId,
+          ),
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
-      }
+      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
       if (mounted) setState(() => _isCreatingChat = false);
     }
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'active':
-        return Colors.green;
-      case 'reserved':
-        return Colors.orange;
-      case 'sold':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
+  Color _getStatusColor(ListingStatus status) => switch (status) {
+    ListingStatus.active => Colors.green,
+    ListingStatus.reserved => Colors.orange,
+    ListingStatus.sold => Colors.red,
+    ListingStatus.hidden => Colors.grey,
+  };
 
   @override
   Widget build(BuildContext context) {
-    final listingId = widget.listing['id'] ?? '';
+    final listingId = widget.listing.id;
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('listings')
-          .doc(listingId)
-          .snapshots(),
+    return StreamBuilder<Listing?>(
+      // The listing is watched live so status changes — reserved, sold —
+      // land on this screen while it is open.
+      stream: context.read<ListingRepository>().watchListing(listingId),
+      initialData: widget.listing,
       builder: (context, snapshot) {
-        final liveData = snapshot.data?.data() as Map<String, dynamic>?;
-        // Merge the document ID back into the live data so Favorites works
-        final l = liveData != null
-            ? {...liveData, 'id': listingId}
-            : widget.listing;
+        final l = snapshot.data ?? widget.listing;
 
-        final title = l['title'] ?? 'No Title';
-        final price = l['price']?.toString() ?? '0.00';
-        final description = l['description'] ?? 'No description provided.';
-        final category = l['category'] ?? 'General';
-
-        final sellerUni =
-            _sellerData?['university'] ?? l['university'] ?? 'None';
-        final sellerName = _sellerData?['fullName'] ?? 'Loading...';
+        final description = l.description.isEmpty
+            ? 'No description provided.'
+            : l.description;
+        final seller = _sellerData;
+        final sellerUni = seller?.hasUniversity == true
+            ? seller!.university
+            : (l.university.isEmpty ? 'None' : l.university);
+        final sellerName = seller?.fullName ?? l.sellerName;
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -264,7 +258,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(l['status'] ?? 'active'),
+                              color: _getStatusColor(l.status),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: AppColors.solidBlack,
@@ -272,7 +266,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                               ),
                             ),
                             child: Text(
-                              (l['status'] ?? 'active').toUpperCase(),
+                              l.status.label.toUpperCase(),
                               style: AppTextStyles.bodyMediumDark.copyWith(
                                 color: Colors.white,
                                 fontSize: 10,
@@ -284,15 +278,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           // 3-dot report menu
                           Builder(
                             builder: (ctx) => GestureDetector(
-                              onTap: () async {
-                                final currentUid = FirebaseAuth.instance.currentUser?.uid;
-                                final isOwner = currentUid == l['userId'];
-                                if (isOwner) return; // owners can't report own listing
+                              onTap: () {
+                                final currentUid =
+                                    FirebaseAuth.instance.currentUser?.uid;
+                                // Owners can't report their own listing.
+                                if (l.isOwnedBy(currentUid)) return;
                                 ReportDialog.show(
                                   ctx,
-                                  targetId: l['id'] ?? '',
+                                  targetId: l.id,
                                   targetType: ReportTargetType.listing,
-                                  targetName: l['title'] ?? 'Listing',
+                                  targetName: l.title,
                                 );
                               },
                               child: Container(
@@ -322,13 +317,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                     children: [
                       Row(
                         children: [
-                          _buildTag(category, true),
+                          _buildTag(l.categoryLabel, true),
                           AppSizes.gapWSm,
                           _buildTag(sellerUni, false),
                         ],
                       ),
                       AppSizes.gapHLG,
-                      Text(title, style: AppTextStyles.heading1),
+                      Text(l.title, style: AppTextStyles.heading1),
                       AppSizes.gapHSm,
                       Text(
                         'Campus Pickup • $sellerUni',
@@ -357,7 +352,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                               ],
                             ),
                             child: Text(
-                              '£$price',
+                              l.formattedPrice,
                               style: AppTextStyles.heading2.copyWith(
                                 color: AppColors.white,
                               ),
@@ -410,19 +405,23 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                           Expanded(
                             child: Builder(
                               builder: (context) {
-                                final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-                                final isMine = currentUserId == l['userId'];
+                                final currentUserId =
+                                    FirebaseAuth.instance.currentUser?.uid;
+                                final isMine = l.isOwnedBy(currentUserId);
+                                final isSold = l.status == ListingStatus.sold;
+
+                                final label = _isCreatingChat
+                                    ? 'PREPARING DEAL...'
+                                    : isMine
+                                    ? 'YOUR LISTING'
+                                    : isSold
+                                    ? 'ITEM SOLD'
+                                    : l.status.acceptsDeals
+                                    ? 'REQUEST TO BUY'
+                                    : 'CONTACT SELLER';
 
                                 return CustomButton(
-                                  text: _isCreatingChat
-                                      ? 'PREPARING DEAL...'
-                                      : (isMine
-                                          ? 'YOUR LISTING'
-                                          : (l['status'] == 'sold'
-                                              ? 'ITEM SOLD'
-                                              : (l['status'] == 'active'
-                                                  ? 'REQUEST TO BUY'
-                                                  : 'CONTACT SELLER'))),
+                                  text: label,
                                   type: ButtonType.solid,
                                   leadingWidget: _isCreatingChat
                                       ? const SizedBox(
@@ -436,19 +435,17 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                       : Icon(
                                           isMine
                                               ? Icons.person
-                                              : (l['status'] == 'sold'
-                                                  ? Icons.block
-                                                  : Icons.handshake_outlined),
+                                              : isSold
+                                              ? Icons.block
+                                              : Icons.handshake_outlined,
                                           color: AppColors.white,
                                           size: 20,
                                         ),
-                                  onPressed: _isCreatingChat ||
-                                          l['status'] == 'sold' ||
-                                          isMine
+                                  onPressed: _isCreatingChat || isSold || isMine
                                       ? null
-                                      : (l['status'] == 'active'
-                                          ? _showSafetyPopup
-                                          : _initiateDeal),
+                                      : () => l.status.acceptsDeals
+                                            ? _showSafetyPopup(l)
+                                            : _initiateDeal(l),
                                 );
                               },
                             ),
@@ -553,7 +550,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                             ),
                             AppSizes.gapHSm,
                             UserTitleBadge(
-                              title: _sellerData?['title'] ?? 'Freshman Trader',
+                              title: (seller ?? AppUser.empty).title,
                               isCompact: true,
                             ),
                             AppSizes.gapHSm,
@@ -592,13 +589,13 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                         Icon(Icons.star, size: 16, color: AppColors.primaryYellow),
                                         const SizedBox(width: 4),
                                         Text(
-                                          (_sellerData?['rating'] as num? ?? 0.0).toStringAsFixed(1),
+                                          (seller ?? AppUser.empty).formattedRating,
                                           style: AppTextStyles.bodyMediumDark,
                                         ),
                                       ],
                                     ),
                                     Text(
-                                      '${_sellerData?['ratingCount'] ?? 0} Reviews',
+                                      '${(seller ?? AppUser.empty).ratingCount} Reviews',
                                       style: AppTextStyles.bodyMedium.copyWith(
                                         fontSize: 12,
                                       ),
@@ -608,7 +605,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                 Column(
                                   children: [
                                     Text(
-                                      '${_sellerData?['dealCount'] ?? 0}',
+                                      '${(seller ?? AppUser.empty).dealCount}',
                                       style: AppTextStyles.bodyMediumDark,
                                     ),
                                     Text(

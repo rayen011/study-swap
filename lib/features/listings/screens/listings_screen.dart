@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -112,7 +114,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
         }
         if (state is ListingLoaded) {
           final listings = state.listings.where((l) {
-            final isSold = l['status'] == 'sold';
+            final isSold = l.status == ListingStatus.sold;
             return showSold ? isSold : !isSold;
           }).toList();
 
@@ -201,15 +203,13 @@ class _ListingsScreenState extends State<ListingsScreen> {
   }
 
   Widget _buildListingCard({
-    required Map<String, dynamic> listing,
+    required Listing listing,
     bool showDelete = false,
   }) {
-    final id = listing['id'];
-    final category = listing['category'] ?? 'OTHER';
-    final title = listing['title'] ?? 'No Title';
-    final price = '£${listing['price'] ?? '0.00'}';
-    final color = category == 'TEXTBOOKS' ? const Color(0xFFE2E8F0) : AppColors.limeGreen;
-    final isSold = listing['status'] == 'sold';
+    final color = listing.category == ListingCategory.textbooks
+        ? const Color(0xFFE2E8F0)
+        : AppColors.limeGreen;
+    final isSold = listing.status == ListingStatus.sold;
 
     return CardLift(
       onTap: isSold ? null : () => context.push('/item-details', extra: listing),
@@ -234,11 +234,11 @@ class _ListingsScreenState extends State<ListingsScreen> {
               child: Stack(
                 children: [
                   const Center(child: Icon(Icons.image, size: 64, color: AppColors.textGrey)),
-                  if (listing['status'] != null && listing['status'] != 'active')
+                  if (listing.status != ListingStatus.active)
                     Positioned.fill(
                       child: Container(
                         decoration: BoxDecoration(
-                          color: (listing['status'] == 'sold' ? Colors.black : Colors.orange).withOpacity(0.6),
+                          color: (isSold ? Colors.black : Colors.orange).withValues(alpha: 0.6),
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
                         ),
                         child: Center(
@@ -250,7 +250,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                               border: Border.all(color: AppColors.solidBlack, width: 1.5),
                             ),
                             child: Text(
-                              listing['status'].toString().toUpperCase(),
+                              listing.status.label.toUpperCase(),
                               style: AppTextStyles.bodyMediumDark.copyWith(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 10,
@@ -269,7 +269,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                         color: AppColors.primaryBlue,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(category, style: AppTextStyles.bodyMediumDark.copyWith(color: AppColors.white, fontSize: 10)),
+                      child: Text(listing.categoryLabel.toUpperCase(), style: AppTextStyles.bodyMediumDark.copyWith(color: AppColors.white, fontSize: 10)),
                     ),
                   ),
                   Positioned(
@@ -282,7 +282,7 @@ class _ListingsScreenState extends State<ListingsScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.solidBlack, width: 2),
                       ),
-                      child: Text(price, style: AppTextStyles.bodyMediumDark.copyWith(color: AppColors.white)),
+                      child: Text(listing.formattedPrice, style: AppTextStyles.bodyMediumDark.copyWith(color: AppColors.white)),
                     ),
                   ),
                 ],
@@ -297,15 +297,15 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(listing['university'] ?? '', style: AppTextStyles.bodyMedium.copyWith(fontSize: 12)),
+                        Text(listing.title, style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(listing.university, style: AppTextStyles.bodyMedium.copyWith(fontSize: 12)),
                       ],
                     ),
                   ),
                   if (showDelete)
                     IconButton(
                       icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _showDeleteDialog(id),
+                      onPressed: () => _showDeleteDialog(listing.id),
                     ),
                 ],
               ),

@@ -17,6 +17,7 @@ import 'features/favorites/data/favorites_repository.dart';
 import 'features/favorites/logic/favorites_cubit.dart';
 import 'features/profile/logic/profile_cubit.dart';
 import 'features/profile/data/rating_repository.dart';
+import 'features/profile/data/user_repository.dart';
 import 'features/report/data/report_repository.dart';
 
 void main() async {
@@ -26,6 +27,7 @@ void main() async {
   );
   
   final authRepository = AuthRepository();
+  final userRepository = UserRepository();
   final listingRepository = ListingRepository();
   final chatRepository = ChatRepository();
   final favoritesRepository = FavoritesRepository();
@@ -34,6 +36,7 @@ void main() async {
   
   runApp(MyApp(
     authRepository: authRepository,
+    userRepository: userRepository,
     listingRepository: listingRepository,
     chatRepository: chatRepository,
     favoritesRepository: favoritesRepository,
@@ -44,6 +47,7 @@ void main() async {
 
 class MyApp extends StatefulWidget {
   final AuthRepository authRepository;
+  final UserRepository userRepository;
   final ListingRepository listingRepository;
   final ChatRepository chatRepository;
   final FavoritesRepository favoritesRepository;
@@ -53,6 +57,7 @@ class MyApp extends StatefulWidget {
   const MyApp({
     super.key, 
     required this.authRepository,
+    required this.userRepository,
     required this.listingRepository,
     required this.chatRepository,
     required this.favoritesRepository,
@@ -87,6 +92,7 @@ class _MyAppState extends State<MyApp> {
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider.value(value: widget.authRepository),
+        RepositoryProvider.value(value: widget.userRepository),
         RepositoryProvider.value(value: widget.listingRepository),
         RepositoryProvider.value(value: widget.chatRepository),
         RepositoryProvider.value(value: widget.favoritesRepository),
@@ -98,7 +104,7 @@ class _MyAppState extends State<MyApp> {
           BlocProvider.value(value: _authCubit),
           BlocProvider(create: (context) => ListingCubit(widget.listingRepository)),
           BlocProvider(create: (context) => MyListingsCubit(widget.listingRepository)),
-          BlocProvider(create: (context) => ProfileCubit(widget.authRepository)),
+          BlocProvider(create: (context) => ProfileCubit(widget.userRepository)),
           BlocProvider(create: (context) => ChatCubit(widget.chatRepository)),
           BlocProvider(create: (context) => MessageCubit(
             widget.chatRepository, 

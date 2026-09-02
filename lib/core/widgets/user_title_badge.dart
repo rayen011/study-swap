@@ -12,20 +12,22 @@ class UserTitleBadge extends StatelessWidget {
     this.isCompact = false,
   });
 
+  /// Deliberately dark, saturated inks: the badge sits on a tinted wash of the
+  /// same hue, so the colour has to carry contrast against near-white.
   Color _getTitleColor() {
     switch (title) {
       case 'Campus Pro':
-        return Colors.redAccent;
+        return const Color(0xFFB3261E); // deep red
       case 'Deal Maker':
-        return Colors.orangeAccent;
+        return const Color(0xFFB25E00); // burnt orange
       case 'Trade Regular':
-        return Colors.amber;
+        return const Color(0xFF8A6100); // dark amber
       case 'Campus Seller':
         return AppColors.primaryBlue;
       case 'Freshman Trader':
-        return Colors.greenAccent;
+        return const Color(0xFF2C6A45); // forest green
       default:
-        return const Color.fromARGB(255, 255, 255, 255);
+        return AppColors.textGrey;
     }
   }
 
@@ -39,11 +41,8 @@ class UserTitleBadge extends StatelessWidget {
         vertical: isCompact ? 2 : 4,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        border: Border.all(
-          color: const Color.fromARGB(255, 241, 241, 241),
-          width: 2,
-        ),
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color, width: 1.5),
         borderRadius: BorderRadius.circular(4),
         boxShadow: const [
           BoxShadow(
@@ -57,9 +56,9 @@ class UserTitleBadge extends StatelessWidget {
         style:
             (isCompact ? AppTextStyles.bodySmall : AppTextStyles.bodyMediumDark)
                 .copyWith(
-                  color: const Color.fromARGB(255, 255, 255, 255),
+                  color: color,
                   fontWeight: FontWeight.w900,
-                  fontSize: isCompact ? 10 : 12,
+                  fontSize: isCompact ? 11 : 12,
                 ),
       ),
     );

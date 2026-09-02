@@ -1,11 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../core/models/listing.dart';
 import '../data/listing_repository.dart';
 import 'listing_state.dart';
 
 class ListingCubit extends Cubit<ListingState> {
   final ListingRepository _listingRepository;
-  StreamSubscription? _listingsSubscription;
+  StreamSubscription<List<Listing>>? _listingsSubscription;
 
   ListingCubit(this._listingRepository) : super(ListingInitial());
 
@@ -14,38 +17,17 @@ class ListingCubit extends Cubit<ListingState> {
     emit(ListingLoading());
     _listingsSubscription?.cancel();
     _listingsSubscription = _listingRepository.getListings().listen(
-      (listings) {
-        emit(ListingLoaded(listings));
-      },
-      onError: (error) {
-        emit(ListingError(error.toString()));
-      },
+      (listings) => emit(ListingLoaded(listings)),
+      onError: (Object error) => emit(ListingError(error.toString())),
     );
   }
 
   /// Creates a new listing.
-  Future<void> createListing({
-    required String title,
-    required String description,
-    required double price,
-    required String category,
-    required String university,
-    required String condition,
-    String? imageUrl,
-  }) async {
+  Future<void> createListing(ListingDraft draft) async {
     emit(ListingLoading());
     try {
-      await _listingRepository.createListing(
-        title: title,
-        description: description,
-        price: price,
-        category: category,
-        university: university,
-        condition: condition,
-        imageUrl: imageUrl,
-      );
+      await _listingRepository.createListing(draft);
       emit(ListingOperationSuccess());
-      // After success, we can trigger a re-fetch if not using streams
     } catch (e) {
       emit(ListingError(e.toString()));
     }

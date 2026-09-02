@@ -1,57 +1,68 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/report.dart';
+
 /// ReportRepository: Handles submitting user and listing reports to Firestore.
 class ReportRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  CollectionReference<Map<String, dynamic>> get _reports =>
+      _firestore.collection('reports');
+
   /// Submits a report. [targetId] can be a userId or listingId.
-  /// [targetType] is either 'user' or 'listing'.
   Future<void> submitReport({
     required String targetId,
-    required String targetType,
+    required ReportTargetType targetType,
     required String reason,
     String? additionalNote,
   }) async {
     final reporterId = _auth.currentUser?.uid;
     if (reporterId == null) throw Exception('Not authenticated');
 
-    await _firestore.collection('reports').add({
+    await _reports.add({
       'reporterId': reporterId,
       'targetId': targetId,
-      'targetType': targetType,  // 'user' | 'listing'
+      'targetType': targetType.wire,
       'reason': reason,
       'additionalNote': additionalNote ?? '',
-      'status': 'pending',       // pending | reviewed | dismissed
+      'status': ReportStatus.pending.wire,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
   /// Streams all pending reports for moderators.
-  Stream<List<Map<String, dynamic>>> getPendingReports() {
-    return _firestore
-        .collection('reports')
-        .where('status', isEqualTo: 'pending')
+  ///
+  /// Needs the composite index declared in `firestore.indexes.json`.
+  Stream<List<Report>> getPendingReports() {
+    return _reports
+        .where('status', isEqualTo: ReportStatus.pending.wire)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    });
+        .map(
+          (snap) => snap.docs
+              .map((doc) => Report.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
+  }
+
+  /// Reads a single report.
+  Future<Report?> getReport(String reportId) async {
+    if (reportId.isEmpty) return null;
+    final doc = await _reports.doc(reportId).get();
+    return Report.fromDoc(doc);
   }
 
   /// Resolves a report with an action taken.
   Future<void> resolveReport({
     required String reportId,
-    required String status, // reviewed | dismissed
+    required ReportStatus status,
     String? actionTaken,
-  }) async {
-    await _firestore.collection('reports').doc(reportId).update({
-      'status': status,
+  }) {
+    return _reports.doc(reportId).update({
+      'status': status.wire,
       'actionTaken': actionTaken ?? 'No action taken',
       'resolvedAt': FieldValue.serverTimestamp(),
       'moderatorId': _auth.currentUser?.uid,
@@ -59,15 +70,15 @@ class ReportRepository {
   }
 
   /// Action: Hide a listing.
-  Future<void> hideListing(String listingId) async {
-    await _firestore.collection('listings').doc(listingId).update({
-      'status': 'hidden',
+  Future<void> hideListing(String listingId) {
+    return _firestore.collection('listings').doc(listingId).update({
+      'status': ListingStatus.hidden.wire,
     });
   }
 
   /// Action: Suspend a user.
-  Future<void> suspendUser(String userId) async {
-    await _firestore.collection('users').doc(userId).update({
+  Future<void> suspendUser(String userId) {
+    return _firestore.collection('users').doc(userId).update({
       'isSuspended': true,
       'suspendedAt': FieldValue.serverTimestamp(),
     });

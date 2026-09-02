@@ -1,21 +1,28 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/models/app_user.dart';
+import '../../../core/models/listing.dart';
+import '../../../core/models/report.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/custom_button.dart';
+import '../../listings/data/listing_repository.dart';
+import '../../profile/data/user_repository.dart';
 import '../data/report_repository.dart';
 
 class ReportDetailsScreen extends StatefulWidget {
   final String reportId;
-  final Map<String, dynamic>? initialData;
+
+  /// Passed through from the queue so the screen renders immediately instead
+  /// of flashing a spinner for a document the previous screen already has.
+  final Report? initialReport;
 
   const ReportDetailsScreen({
     super.key,
     required this.reportId,
-    this.initialData,
+    this.initialReport,
   });
 
   @override
@@ -23,75 +30,90 @@ class ReportDetailsScreen extends StatefulWidget {
 }
 
 class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
-  Map<String, dynamic>? _reportData;
-  Map<String, dynamic>? _targetData;
+  Report? _report;
+
+  /// Whichever of the two the report points at; the other stays null.
+  AppUser? _targetUser;
+  Listing? _targetListing;
+
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _report = widget.initialReport;
     _fetchData();
   }
 
   Future<void> _fetchData() async {
+    final reportRepository = context.read<ReportRepository>();
+    final userRepository = context.read<UserRepository>();
+    final listingRepository = context.read<ListingRepository>();
+
     try {
-      if (widget.initialData != null) {
-        _reportData = widget.initialData;
+      final report = _report ?? await reportRepository.getReport(widget.reportId);
+      if (report == null) return;
+
+      AppUser? user;
+      Listing? listing;
+      if (report.targetType.isUser) {
+        user = await userRepository.getUser(report.targetId);
       } else {
-        final doc = await FirebaseFirestore.instance
-            .collection('reports')
-            .doc(widget.reportId)
-            .get();
-        _reportData = doc.data();
-        _reportData?['id'] = doc.id;
+        listing = await listingRepository.getListing(report.targetId);
       }
 
-      if (_reportData != null) {
-        final targetId = _reportData!['targetId'];
-        final targetType = _reportData!['targetType'];
-        final collection = targetType == 'user' ? 'users' : 'listings';
-
-        final targetDoc = await FirebaseFirestore.instance
-            .collection(collection)
-            .doc(targetId)
-            .get();
-        _targetData = targetDoc.data();
-        _targetData?['id'] = targetDoc.id;
-      }
-    } catch (e) {
-      // Error handling
+      if (!mounted) return;
+      setState(() {
+        _report = report;
+        _targetUser = user;
+        _targetListing = listing;
+      });
+    } catch (_) {
+      // Leaves the screen on whatever it already had; the target section
+      // renders its "no longer exists" state.
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _takeAction(String status, String actionTaken) async {
-    final reportRepo = context.read<ReportRepository>();
-    final targetId = _reportData!['targetId'];
-    final targetType = _reportData!['targetType'];
+  Future<void> _takeAction(ReportStatus status, String actionTaken) async {
+    final report = _report;
+    if (report == null) return;
+
+    final reportRepository = context.read<ReportRepository>();
+    final messenger = ScaffoldMessenger.of(context);
 
     setState(() => _isLoading = true);
 
     try {
-      if (actionTaken == 'Hide Listing' && targetType == 'listing') {
-        await reportRepo.hideListing(targetId);
+      if (actionTaken == 'Hide Listing' && !report.targetType.isUser) {
+        await reportRepository.hideListing(report.targetId);
       } else if (actionTaken == 'Suspend User') {
-        final userId = targetType == 'user'
-            ? targetId
-            : (_targetData?['userId'] ?? '');
-        if (userId.isNotEmpty) {
-          await reportRepo.suspendUser(userId);
+        // For a listing report, the user to suspend is the listing's owner.
+        final userId = report.targetType.isUser
+            ? report.targetId
+            : (_targetListing?.userId ?? '');
+        if (userId.isEmpty) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Cannot suspend: the listing owner is unknown.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          if (mounted) setState(() => _isLoading = false);
+          return;
         }
+        await reportRepository.suspendUser(userId);
       }
 
-      await reportRepo.resolveReport(
+      await reportRepository.resolveReport(
         reportId: widget.reportId,
         status: status,
         actionTaken: actionTaken,
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Report resolved: $actionTaken'),
             backgroundColor: AppColors.limeGreen,
@@ -100,14 +122,12 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
         context.pop();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -115,13 +135,29 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading && _reportData == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final report = _report;
+    if (report == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          backgroundColor: AppColors.white,
+          elevation: 0,
+          title: const Text('Review Report'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.solidBlack),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: _isLoading
+              ? const CircularProgressIndicator()
+              : Text('This report no longer exists.',
+                  style: AppTextStyles.bodyMediumDark),
+        ),
+      );
     }
 
-    final type = _reportData?['targetType'] ?? 'Unknown';
-    final reason = _reportData?['reason'] ?? 'No reason';
-    final note = _reportData?['additionalNote'] ?? '';
+    final isListing = !report.targetType.isUser;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -142,34 +178,32 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
           children: [
             _buildSectionHeader('REPORT INFO'),
             _buildInfoCard([
-              _buildInfoRow('Type', type.toUpperCase()),
-              _buildInfoRow('Reason', reason),
-              if (note.isNotEmpty) _buildInfoRow('Additional Note', note),
+              _buildInfoRow('Type', report.targetType.label.toUpperCase()),
+              _buildInfoRow('Reason', report.reason),
+              if (report.hasNote)
+                _buildInfoRow('Additional Note', report.additionalNote),
             ]),
             AppSizes.gapHLG,
             _buildSectionHeader('TARGET CONTEXT'),
-            if (_targetData != null)
+            if (_targetListing != null)
               _buildInfoCard([
-                if (type == 'listing') ...[
-                  _buildInfoRow('Title', _targetData!['title'] ?? 'N/A'),
-                  _buildInfoRow('Price', '£${_targetData!['price']}'),
-                  _buildInfoRow('Status', _targetData!['status'] ?? 'N/A'),
-                  _buildInfoRow('Seller ID', _targetData!['userId'] ?? 'N/A'),
-                ] else ...[
-                  _buildInfoRow('Full Name', _targetData!['fullName'] ?? 'N/A'),
-                  _buildInfoRow('Email', _targetData!['email'] ?? 'N/A'),
-                  _buildInfoRow(
-                    'University',
-                    _targetData!['university'] ?? 'N/A',
-                  ),
-                  _buildInfoRow(
-                    'Status',
-                    _targetData!['isSuspended'] == true
-                        ? 'SUSPENDED'
-                        : 'ACTIVE',
-                  ),
-                ],
+                _buildInfoRow('Title', _targetListing!.title),
+                _buildInfoRow('Price', _targetListing!.formattedPrice),
+                _buildInfoRow('Status', _targetListing!.status.label),
+                _buildInfoRow('Seller ID', _targetListing!.userId),
               ])
+            else if (_targetUser != null)
+              _buildInfoCard([
+                _buildInfoRow('Full Name', _targetUser!.fullName),
+                _buildInfoRow('Email', _targetUser!.email),
+                _buildInfoRow('University', _targetUser!.university),
+                _buildInfoRow(
+                  'Status',
+                  _targetUser!.isSuspended ? 'SUSPENDED' : 'ACTIVE',
+                ),
+              ])
+            else if (_isLoading)
+              const Center(child: CircularProgressIndicator())
             else
               const Text(
                 'Target data no longer exists.',
@@ -185,18 +219,21 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               type: ButtonType.outline,
               onPressed: _isLoading
                   ? null
-                  : () => _takeAction('dismissed', 'Dismissed - No violation'),
+                  : () => _takeAction(
+                      ReportStatus.dismissed, 'Dismissed - No violation'),
             ),
             AppSizes.gapHMD,
-            if (type == 'listing')
+            if (isListing) ...[
               CustomButton(
                 text: 'HIDE LISTING',
                 type: ButtonType.solid,
                 onPressed: _isLoading
                     ? null
-                    : () => _takeAction('reviewed', 'Hide Listing'),
+                    : () =>
+                        _takeAction(ReportStatus.reviewed, 'Hide Listing'),
               ),
-            if (type == 'listing') AppSizes.gapHMD,
+              AppSizes.gapHMD,
+            ],
 
             CustomButton(
               text: 'SUSPEND USER',
@@ -204,7 +241,8 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
               backgroundColor: Colors.red,
               onPressed: _isLoading
                   ? null
-                  : () => _takeAction('reviewed', 'Suspend User'),
+                  : () =>
+                      _takeAction(ReportStatus.reviewed, 'Suspend User'),
             ),
 
             AppSizes.gapHXXL,

@@ -1,16 +1,21 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/app_user.dart';
+import '../../../core/models/listing.dart';
+import '../../../core/models/review.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../auth/logic/auth_cubit.dart';
 import '../../auth/logic/auth_state.dart';
 import '../../listings/logic/my_listings_cubit.dart';
 import '../../listings/logic/listing_state.dart';
+import '../data/rating_repository.dart';
+import '../data/user_repository.dart';
 import '../logic/profile_cubit.dart';
 import '../logic/profile_state.dart';
 import '../../../core/widgets/user_title_badge.dart';
@@ -26,8 +31,13 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<Map<String, dynamic>> _reviews = [];
+  List<Review> _reviews = const [];
   bool _reviewsLoading = true;
+
+  /// Read from the auth token's custom claim, never from the user document —
+  /// that field is client-writable. This only controls whether the button is
+  /// shown; `firestore.rules` is what actually gates moderator actions.
+  bool _isModerator = false;
 
   @override
   void initState() {
@@ -36,6 +46,14 @@ class _ProfileScreenState extends State<ProfileScreen>
     context.read<ProfileCubit>().loadProfile();
     context.read<MyListingsCubit>().fetchUserListings();
     _loadReviews();
+    _loadModeratorStatus();
+  }
+
+  Future<void> _loadModeratorStatus() async {
+    final isModerator = await context.read<AuthRepository>().isModerator();
+    if (mounted && isModerator != _isModerator) {
+      setState(() => _isModerator = isModerator);
+    }
   }
 
   @override
@@ -45,30 +63,16 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _loadReviews() async {
+    // Both repositories are read up front: awaiting between two `context.read`
+    // calls would use the context across an async gap.
+    final userRepository = context.read<UserRepository>();
+    final ratingRepository = context.read<RatingRepository>();
+
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) {
-        setState(() => _reviewsLoading = false);
-        return;
-      }
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('reviews')
-          .where('toId', isEqualTo: uid)
-          .get();
-
-      final reviews = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-
-      reviews.sort((a, b) {
-        final aTime = a['timestamp'] as Timestamp?;
-        final bTime = b['timestamp'] as Timestamp?;
-        if (aTime == null || bTime == null) return 0;
-        return bTime.compareTo(aTime);
-      });
+      final profile = await userRepository.getCurrentUser();
+      final reviews = profile == null
+          ? const <Review>[]
+          : await ratingRepository.getReviewsFor(profile.id);
 
       if (mounted) {
         setState(() {
@@ -122,35 +126,21 @@ class _ProfileScreenState extends State<ProfileScreen>
         ),
         body: BlocBuilder<ProfileCubit, ProfileState>(
           builder: (context, profileState) {
-            String name = 'STUDENT';
-            String university = 'NONE';
-            double rating = 0.0;
-            int ratingCount = 0;
-            int dealCount = 0;
-            String title = 'Freshman Trader';
-            DateTime? joinDate;
-
-            if (profileState is ProfileLoaded) {
-              name = profileState.userData['fullName']?.toUpperCase() ?? 'STUDENT';
-              university = profileState.userData['university'] ?? 'none';
-              rating = (profileState.userData['rating'] as num? ?? 0.0).toDouble();
-              ratingCount = (profileState.userData['ratingCount'] as num? ?? 0).toInt();
-              dealCount = (profileState.userData['dealCount'] as num? ?? 0).toInt();
-              title = profileState.userData['title'] ?? 'Freshman Trader';
-              final ts = profileState.userData['createdAt'];
-              if (ts is Timestamp) joinDate = ts.toDate();
-            }
+            final user = profileState is ProfileLoaded
+                ? profileState.user
+                : AppUser.empty;
+            final name = user.fullName.toUpperCase();
 
             return BlocBuilder<MyListingsCubit, ListingState>(
               builder: (context, listingState) {
                 final allListings = listingState is ListingLoaded
                     ? listingState.listings
-                    : <Map<String, dynamic>>[];
+                    : const <Listing>[];
                 final activeListings = allListings
-                    .where((l) => l['status'] != 'sold')
+                    .where((l) => l.status != ListingStatus.sold)
                     .toList();
                 final soldListings = allListings
-                    .where((l) => l['status'] == 'sold')
+                    .where((l) => l.status == ListingStatus.sold)
                     .toList();
 
                 return NestedScrollView(
@@ -162,13 +152,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             AppSizes.gapHLG,
-                            _buildProfileCard(
-                                name, university, rating, ratingCount,
-                                dealCount, title, joinDate),
+                            _buildProfileCard(name, user),
                             AppSizes.gapHLG,
-                            _buildStatsRow(
-                                activeListings.length, soldListings.length,
-                                rating, ratingCount),
+                            _buildStatsRow(activeListings.length,
+                                soldListings.length, user),
                             AppSizes.gapHLG,
                           ],
                         ),
@@ -212,8 +199,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // ── Profile Card ──────────────────────────────────────────────────────────
 
-  Widget _buildProfileCard(String name, String university, double rating,
-      int ratingCount, int dealCount, String title, DateTime? joinDate) {
+  Widget _buildProfileCard(String name, AppUser user) {
+    final joinDate = user.createdAt;
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
@@ -251,14 +238,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                     const Icon(Icons.school_outlined,
                         color: AppColors.primaryBlue, size: 14),
                     const SizedBox(width: 6),
-                    Text(university,
+                    Text(user.university,
                         style: AppTextStyles.bodyMediumDark
                             .copyWith(color: AppColors.primaryBlue, fontSize: 12)),
                   ],
                 ),
               ),
               AppSizes.gapHSm,
-              UserTitleBadge(title: title),
+              UserTitleBadge(title: user.title),
               AppSizes.gapHSm,
               // Join date
               if (joinDate != null)
@@ -312,37 +299,28 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
               
-              // Moderation Dashboard (Only for Moderators)
-              BlocBuilder<ProfileCubit, ProfileState>(
-                builder: (context, state) {
-                  if (state is ProfileLoaded && state.userData['role'] == 'moderator') {
-                    return Column(
-                      children: [
-                        AppSizes.gapHSm,
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => context.push('/moderation'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.solidBlack,
-                              foregroundColor: AppColors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              side: const BorderSide(
-                                  color: AppColors.solidBlack, width: 1.5),
-                            ),
-                            icon: const Icon(Icons.admin_panel_settings, size: 16),
-                            label: Text('MODERATION DASHBOARD',
-                                style: AppTextStyles.buttonTextWhite),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
+              // Moderation Dashboard (only for moderators — see [_isModerator])
+              if (_isModerator) ...[
+                AppSizes.gapHSm,
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => context.push('/moderation'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.solidBlack,
+                      foregroundColor: AppColors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      side: const BorderSide(
+                          color: AppColors.solidBlack, width: 1.5),
+                    ),
+                    icon: const Icon(Icons.admin_panel_settings, size: 16),
+                    label: Text('MODERATION DASHBOARD',
+                        style: AppTextStyles.buttonTextWhite),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -394,8 +372,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // ── Stats Row ─────────────────────────────────────────────────────────────
 
-  Widget _buildStatsRow(
-      int activeCount, int soldCount, double rating, int ratingCount) {
+  Widget _buildStatsRow(int activeCount, int soldCount, AppUser user) {
     return Row(
       children: [
         Expanded(
@@ -410,7 +387,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         const SizedBox(width: 8),
         Expanded(
             child: _buildStatCard(
-                rating.toStringAsFixed(1), '$ratingCount Reviews',
+                user.formattedRating, '${user.ratingCount} Reviews',
                 AppColors.primaryYellow, Icons.star_rounded, dark: true)),
       ],
     );
@@ -455,7 +432,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   // ── Listings Grid ─────────────────────────────────────────────────────────
 
-  Widget _buildListingsGrid(List<Map<String, dynamic>> listings,
+  Widget _buildListingsGrid(List<Listing> listings,
       {bool isSold = false, bool isLoading = false}) {
     if (isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -494,29 +471,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildListingCard(Map<String, dynamic> listing,
-      {bool isSold = false}) {
-    final title = listing['title'] ?? 'Item';
-    final price = listing['price'];
-    final category = listing['category'] ?? '';
-    final imageUrl = listing['imageUrl'] ?? '';
-    final status = listing['status'] ?? 'active';
-
-    Color statusColor;
-    String statusLabel;
-    switch (status) {
-      case 'sold':
-        statusColor = Colors.red;
-        statusLabel = 'SOLD';
-        break;
-      case 'reserved':
-        statusColor = Colors.orange;
-        statusLabel = 'RESERVED';
-        break;
-      default:
-        statusColor = Colors.green;
-        statusLabel = 'ACTIVE';
-    }
+  Widget _buildListingCard(Listing listing, {bool isSold = false}) {
+    final statusColor = switch (listing.status) {
+      ListingStatus.sold => Colors.red,
+      ListingStatus.reserved => Colors.orange,
+      ListingStatus.hidden => AppColors.textGrey,
+      ListingStatus.active => Colors.green,
+    };
 
     return Container(
       decoration: BoxDecoration(
@@ -538,8 +499,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  imageUrl.isNotEmpty
-                      ? Image.network(imageUrl, fit: BoxFit.cover,
+                  listing.imageUrl.isNotEmpty
+                      ? Image.network(listing.imageUrl, fit: BoxFit.cover,
                           errorBuilder: (_, e, s) => _placeholderImage())
                       : _placeholderImage(),
                   // Status badge
@@ -556,7 +517,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             Border.all(color: AppColors.solidBlack, width: 1),
                       ),
                       child: Text(
-                        statusLabel,
+                        listing.status.label.toUpperCase(),
                         style: const TextStyle(
                             color: Colors.white,
                             fontSize: 8,
@@ -574,7 +535,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
+                Text(listing.title,
                     style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 12),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
@@ -582,10 +543,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('£${price?.toStringAsFixed(2) ?? '0.00'}',
+                    Text(listing.formattedPrice,
                         style: AppTextStyles.heading2.copyWith(fontSize: 14,
                             color: AppColors.primaryBlue)),
-                    Text(category,
+                    Text(listing.categoryLabel,
                         style: AppTextStyles.bodyMedium
                             .copyWith(fontSize: 9),
                         maxLines: 1,
@@ -635,12 +596,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildReviewCard(Map<String, dynamic> review) {
-    final rating = (review['rating'] as num? ?? 0).toInt();
-    final comment = review['comment'] ?? '';
-    final ts = review['timestamp'] as Timestamp?;
-    final date = ts != null
-        ? DateFormat('dd MMM yyyy').format(ts.toDate())
+  Widget _buildReviewCard(Review review) {
+    final createdAt = review.createdAt;
+    final date = createdAt != null
+        ? DateFormat('dd MMM yyyy').format(createdAt)
         : 'Recently';
 
     return Container(
@@ -664,7 +623,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 children: List.generate(
                   5,
                   (i) => Icon(
-                    i < rating ? Icons.star : Icons.star_border,
+                    i < review.stars ? Icons.star : Icons.star_border,
                     size: 18,
                     color: AppColors.primaryYellow,
                   ),
@@ -674,9 +633,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   style: AppTextStyles.bodyMedium.copyWith(fontSize: 10)),
             ],
           ),
-          if (comment.isNotEmpty) ...[
+          if (review.hasComment) ...[
             const SizedBox(height: 8),
-            Text(comment, style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 13)),
+            Text(review.comment,
+                style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 13)),
           ],
         ],
       ),

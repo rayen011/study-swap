@@ -1,19 +1,20 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../auth/data/auth_repository.dart';
+
+import '../data/user_repository.dart';
 import 'profile_state.dart';
 
 class ProfileCubit extends Cubit<ProfileState> {
-  final AuthRepository _authRepository;
+  final UserRepository _userRepository;
 
-  ProfileCubit(this._authRepository) : super(ProfileInitial());
+  ProfileCubit(this._userRepository) : super(ProfileInitial());
 
   /// Fetches the current user's profile data.
   Future<void> loadProfile() async {
     emit(ProfileLoading());
     try {
-      final userData = await _authRepository.getUserData();
-      if (userData != null) {
-        emit(ProfileLoaded(userData));
+      final user = await _userRepository.getCurrentUser();
+      if (user != null) {
+        emit(ProfileLoaded(user));
       } else {
         emit(const ProfileError('Failed to load profile data'));
       }
@@ -26,7 +27,7 @@ class ProfileCubit extends Cubit<ProfileState> {
   Future<void> updateProfile({String? fullName, String? university}) async {
     emit(ProfileLoading());
     try {
-      await _authRepository.updateUserProfile(
+      await _userRepository.updateProfile(
         fullName: fullName,
         university: university,
       );

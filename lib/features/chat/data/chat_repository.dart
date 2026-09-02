@@ -1,72 +1,68 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/models/chat_summary.dart';
+import '../../../core/models/listing.dart';
+import '../../../core/models/message.dart';
+
 /// ChatRepository: Handles real-time messaging and chat management in Firestore.
 class ChatRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Streams all chats where the current user is a participant.
-  Stream<List<Map<String, dynamic>>> getChats() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
+  CollectionReference<Map<String, dynamic>> get _chats =>
+      _firestore.collection('chats');
 
-    return _firestore
-        .collection('chats')
+  CollectionReference<Map<String, dynamic>> _messagesOf(String chatId) =>
+      _chats.doc(chatId).collection('messages');
+
+  /// Streams all chats where the current user is a participant.
+  Stream<List<ChatSummary>> getChats() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value(const []);
+
+    return _chats
         .where('participants', arrayContains: uid)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    });
+        .map(
+          (snap) => snap.docs
+              .map((doc) => ChatSummary.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
   }
 
-  /// Streams messages for a specific chat.
-  Stream<List<Map<String, dynamic>>> getMessages(String chatId) {
-    return _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
+  /// Streams messages for a specific chat, newest first.
+  Stream<List<Message>> getMessages(String chatId) {
+    return _messagesOf(chatId)
         .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    });
+        .map(
+          (snap) => snap.docs
+              .map((doc) => Message.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
   }
 
   /// Sends a message and updates the last message in the chat metadata.
-  Future<void> sendMessage(String chatId, String receiverId, String text) async {
+  Future<void> sendMessage(
+    String chatId,
+    String receiverId,
+    String text,
+  ) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
     final timestamp = FieldValue.serverTimestamp();
-
     final batch = _firestore.batch();
 
-    // 1. Add message to sub-collection
-    final messageRef = _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .doc();
-    
-    batch.set(messageRef, {
+    batch.set(_messagesOf(chatId).doc(), {
       'senderId': uid,
       'receiverId': receiverId,
       'text': text,
       'timestamp': timestamp,
     });
 
-    // 2. Update chat metadata
-    final chatRef = _firestore.collection('chats').doc(chatId);
-    batch.update(chatRef, {
+    batch.update(_chats.doc(chatId), {
       'lastMessage': text,
       'lastTimestamp': timestamp,
       'lastSenderId': uid,
@@ -77,43 +73,36 @@ class ChatRepository {
   }
 
   /// Sends a deal request (special message type).
-  Future<void> sendDealRequest(String chatId, String receiverId, Map<String, dynamic> listing) async {
+  Future<void> sendDealRequest(
+    String chatId,
+    String receiverId,
+    Listing listing,
+  ) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
     final timestamp = FieldValue.serverTimestamp();
     final batch = _firestore.batch();
 
-    final messageRef = _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .doc();
-
-    final sellerId = listing['userId'];
-    final buyerId = uid;
-
-    batch.set(messageRef, {
+    batch.set(_messagesOf(chatId).doc(), {
       'senderId': uid,
       'receiverId': receiverId,
       'type': 'deal',
-      'text': 'Deal Request for ${listing['title']}',
+      'text': 'Deal Request for ${listing.title}',
       'timestamp': timestamp,
       'dealData': {
-        'itemId': listing['id'],
-        'title': listing['title'],
-        'price': listing['price'],
-        'status': 'pending', // pending, accepted, declined, completed
-        'buyerId': buyerId,
-        'sellerId': sellerId,
-        'listingOwnerId': sellerId,
+        'itemId': listing.id,
+        'title': listing.title,
+        'price': listing.price,
+        'status': DealStatus.pending.wire,
+        'buyerId': uid,
+        'sellerId': listing.userId,
         'createdAt': timestamp,
       },
     });
 
-    final chatRef = _firestore.collection('chats').doc(chatId);
-    batch.update(chatRef, {
-      'lastMessage': '🤝 New Deal Request: ${listing['title']}',
+    batch.update(_chats.doc(chatId), {
+      'lastMessage': '🤝 New Deal Request: ${listing.title}',
       'lastTimestamp': timestamp,
       'lastSenderId': uid,
       'unreadCount.$receiverId': FieldValue.increment(1),
@@ -122,26 +111,45 @@ class ChatRepository {
     await batch.commit();
   }
 
-  /// Updates the status of a deal message.
-  Future<void> updateDealStatus(String chatId, String messageId, String newStatus) async {
-    await _firestore
-        .collection('chats')
-        .doc(chatId)
-        .collection('messages')
-        .doc(messageId)
-        .update({
-      'dealData.status': newStatus,
+  /// Whether this user already has an open deal on [listingId] in this chat.
+  ///
+  /// Guards against firing off a second request every time the buy button is
+  /// tapped.
+  Future<bool> hasOpenDeal(String chatId, String listingId) async {
+    final open = await _messagesOf(chatId)
+        .where('type', isEqualTo: 'deal')
+        .where('dealData.itemId', isEqualTo: listingId)
+        .get();
+
+    return open.docs.any((doc) {
+      final status = DealStatus.fromWire(
+        (doc.data()['dealData'] as Map?)?['status'],
+      );
+      return status == DealStatus.pending || status == DealStatus.accepted;
     });
   }
 
+  /// Updates the status of a deal message.
+  Future<void> updateDealStatus(
+    String chatId,
+    String messageId,
+    DealStatus newStatus,
+  ) {
+    return _messagesOf(
+      chatId,
+    ).doc(messageId).update({'dealData.status': newStatus.wire});
+  }
+
   /// Resets the unread count for the current user in a specific chat.
+  ///
+  /// Callers decide when this is worth doing — see `_markRead` in
+  /// ChatDetailsScreen, which only calls it for a genuinely new inbound
+  /// message rather than on every snapshot.
   Future<void> markAsRead(String chatId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
-    await _firestore.collection('chats').doc(chatId).update({
-      'unreadCount.$uid': 0,
-    });
+    await _chats.doc(chatId).update({'unreadCount.$uid': 0});
   }
 
   /// Streams the total unread message count for the current user.
@@ -149,15 +157,12 @@ class ChatRepository {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(0);
 
-    return _firestore
-        .collection('chats')
-        .where('participants', arrayContains: uid)
-        .snapshots()
-        .map((snapshot) {
-      int total = 0;
-      for (var doc in snapshot.docs) {
-        final unreadCount = doc.data()['unreadCount'] as Map<String, dynamic>?;
-        total += (unreadCount?[uid] as num? ?? 0).toInt();
+    return _chats.where('participants', arrayContains: uid).snapshots().map((
+      snap,
+    ) {
+      var total = 0;
+      for (final doc in snap.docs) {
+        total += ChatSummary.fromMap(doc.id, doc.data()).unreadFor(uid);
       }
       return total;
     });
@@ -165,36 +170,33 @@ class ChatRepository {
 
   /// Creates a chat between two users if it doesn't exist.
   /// Returns the chatId.
-  Future<String> getOrCreateChat(String otherUserId, String otherUserName) async {
+  Future<String> getOrCreateChat(
+    String otherUserId,
+    String otherUserName,
+  ) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw Exception('User not logged in');
 
-    // Generate a consistent ID regardless of who starts the chat
+    // A consistent id regardless of who starts the chat. `firestore.rules`
+    // requires the document id to be exactly this join.
     final participants = [uid, otherUserId]..sort();
     final chatId = participants.join('_');
 
-    final chatDoc = await _firestore.collection('chats').doc(chatId).get();
+    final chatDoc = await _chats.doc(chatId).get();
+    if (chatDoc.exists) return chatId;
 
-    if (!chatDoc.exists) {
-      // Get current user name for the other person to see
-      final currentUserDoc = await _firestore.collection('users').doc(uid).get();
-      final currentUserName = currentUserDoc.data()?['fullName'] ?? 'Student';
+    final currentUserDoc = await _firestore.collection('users').doc(uid).get();
+    final currentUserName =
+        currentUserDoc.data()?['fullName'] as String? ?? 'Student';
 
-      await _firestore.collection('chats').doc(chatId).set({
-        'participants': participants,
-        'participantNames': {
-          uid: currentUserName,
-          otherUserId: otherUserName,
-        },
-        'unreadCount': {
-          uid: 0,
-          otherUserId: 0,
-        },
-        'lastMessage': '',
-        'lastTimestamp': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
+    await _chats.doc(chatId).set({
+      'participants': participants,
+      'participantNames': {uid: currentUserName, otherUserId: otherUserName},
+      'unreadCount': {uid: 0, otherUserId: 0},
+      'lastMessage': '',
+      'lastTimestamp': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
 
     return chatId;
   }

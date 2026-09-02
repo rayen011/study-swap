@@ -25,8 +25,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.initState();
     final profileState = context.read<ProfileCubit>().state;
     if (profileState is ProfileLoaded) {
-      _nameController.text = profileState.userData['fullName'] ?? '';
-      _uniController.text = profileState.userData['university'] ?? '';
+      _nameController.text = profileState.user.fullName;
+      _uniController.text = profileState.user.university;
     }
   }
 

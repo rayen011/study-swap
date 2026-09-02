@@ -1,12 +1,15 @@
 import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
+
+import '../../../core/models/listing.dart';
 import '../data/listing_repository.dart';
 import 'listing_state.dart';
 
 /// MyListingsCubit: Manages the user's personal listings independently.
 class MyListingsCubit extends Cubit<ListingState> {
   final ListingRepository _listingRepository;
-  StreamSubscription? _subscription;
+  StreamSubscription<List<Listing>>? _subscription;
 
   MyListingsCubit(this._listingRepository) : super(ListingInitial());
 
@@ -15,7 +18,7 @@ class MyListingsCubit extends Cubit<ListingState> {
     _subscription?.cancel();
     _subscription = _listingRepository.getUserListings().listen(
       (listings) => emit(ListingLoaded(listings)),
-      onError: (e) => emit(ListingError(e.toString())),
+      onError: (Object e) => emit(ListingError(e.toString())),
     );
   }
 

@@ -1,72 +1,70 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/models/listing.dart';
+
 class FavoritesRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  /// Toggles the favorite status of a listing.
-  Future<void> toggleFavorite(Map<String, dynamic> listing) async {
+  CollectionReference<Map<String, dynamic>>? get _favorites {
     final uid = _auth.currentUser?.uid;
-    if (uid == null) throw Exception('User not logged in');
+    if (uid == null) return null;
+    return _firestore.collection('users').doc(uid).collection('favorites');
+  }
 
-    final listingId = listing['id'];
-    final favoriteRef = _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('favorites')
-        .doc(listingId);
+  /// Toggles the favorite status of a listing.
+  Future<void> toggleFavorite(Listing listing) async {
+    final favorites = _favorites;
+    if (favorites == null) throw Exception('User not logged in');
 
-    final doc = await favoriteRef.get();
+    final ref = favorites.doc(listing.id);
+    final doc = await ref.get();
 
     if (doc.exists) {
-      await favoriteRef.delete();
+      await ref.delete();
     } else {
-      await favoriteRef.set({
-        ...listing,
+      // Only the pointer is stored; the listing itself is read live so a
+      // favourite never shows a stale price.
+      await ref.set({
+        'listingId': listing.id,
         'favoritedAt': FieldValue.serverTimestamp(),
       });
     }
   }
 
   /// Streams the list of favorite listings for the current user.
-  /// Fetches live data from the 'listings' collection to avoid stale data.
-  Stream<List<Map<String, dynamic>>> getFavorites() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
+  ///
+  /// Each favourite is re-read from `listings` so the card reflects the
+  /// current price and status. That's one read per favourite per change —
+  /// batching it is tracked as a follow-up.
+  Stream<List<Listing>> getFavorites() {
+    final favorites = _favorites;
+    if (favorites == null) return Stream.value(const []);
 
-    return _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('favorites')
+    return favorites
         .orderBy('favoritedAt', descending: true)
         .snapshots()
         .asyncMap((snapshot) async {
-      final List<Map<String, dynamic>> results = [];
-      for (var favDoc in snapshot.docs) {
-        final listingId = favDoc.id;
-        final listingDoc = await _firestore.collection('listings').doc(listingId).get();
-        if (listingDoc.exists) {
-          final data = listingDoc.data()!;
-          data['id'] = listingDoc.id;
-          results.add(data);
-        }
-      }
-      return results;
-    });
+          final listings = <Listing>[];
+          for (final favDoc in snapshot.docs) {
+            final listingDoc = await _firestore
+                .collection('listings')
+                .doc(favDoc.id)
+                .get();
+            final listing = Listing.fromDoc(listingDoc);
+            // Skip listings deleted since they were favourited.
+            if (listing != null) listings.add(listing);
+          }
+          return listings;
+        });
   }
 
   /// Checks if a specific listing is favorited.
   Stream<bool> isFavorited(String listingId) {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value(false);
+    final favorites = _favorites;
+    if (favorites == null || listingId.isEmpty) return Stream.value(false);
 
-    return _firestore
-        .collection('users')
-        .doc(uid)
-        .collection('favorites')
-        .doc(listingId)
-        .snapshots()
-        .map((doc) => doc.exists);
+    return favorites.doc(listingId).snapshots().map((doc) => doc.exists);
   }
 }

@@ -141,7 +141,7 @@ class _CardLiftState extends State<CardLift> with SingleTickerProviderStateMixin
               boxShadow: _isHovered || _controller.isAnimating || _controller.value > 0
                   ? [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
+                        color: Colors.black.withValues(alpha: 0.1),
                         offset: const Offset(0, 8),
                         blurRadius: 16,
                       )

@@ -3,10 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../../../core/models/chat_summary.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../logic/chat_cubit.dart';
+import 'chat_details_screen.dart';
 
 /// ChatScreen: Displays the list of active conversations.
 class ChatScreen extends StatefulWidget {
@@ -70,32 +72,21 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildChatTile(Map<String, dynamic> chat) {
-    final participants = (chat['participants'] as List<dynamic>?) ?? [];
-    final otherUserId = participants.firstWhere(
-      (id) => id != _currentUserId,
-      orElse: () => _currentUserId,
-    );
-    final participantNames = chat['participantNames'] as Map<String, dynamic>?;
-    final otherUserName = participantNames?[otherUserId] ?? 'Student';
-
-    final lastMessage = chat['lastMessage'] ?? 'No messages yet';
-    final timestamp = chat['lastTimestamp'];
-    String timeStr = '';
-    if (timestamp != null) {
-      try {
-        timeStr = DateFormat('HH:mm').format(timestamp.toDate());
-      } catch (_) {}
-    }
+  Widget _buildChatTile(ChatSummary chat) {
+    final otherUserId = chat.otherParticipantId(_currentUserId);
+    final otherUserName = chat.otherParticipantName(_currentUserId);
+    final lastMessage = chat.hasMessages ? chat.lastMessage : 'No messages yet';
+    final sentAt = chat.lastMessageAt;
+    final timeStr = sentAt == null ? '' : DateFormat('HH:mm').format(sentAt);
 
     return GestureDetector(
       onTap: () => context.push(
         '/chat-details',
-        extra: {
-          'chatId': chat['id'],
-          'receiverName': otherUserName,
-          'receiverId': otherUserId,
-        },
+        extra: ChatDetailsArgs(
+          chatId: chat.id,
+          receiverName: otherUserName,
+          receiverId: otherUserId,
+        ),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
@@ -164,7 +155,7 @@ class _ChatScreenState extends State<ChatScreen> {
           Icon(
             Icons.chat_bubble_outline,
             size: 64,
-            color: AppColors.textGrey.withOpacity(0.5),
+            color: AppColors.textGrey.withValues(alpha: 0.5),
           ),
           AppSizes.gapHMD,
           Text('No conversations yet', style: AppTextStyles.bodyMediumDark),

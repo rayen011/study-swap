@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -37,17 +39,9 @@ extension SortLabel on SortOption {
   }
 }
 
-// ── Condition options ─────────────────────────────────────────────────────────
-const _conditions = ['All', 'New', 'Used'];
-
-const _categories = [
-  'All',
-  'Textbooks',
-  'Study Summaries',
-  'Electronics',
-  'Stationery',
-  'Other',
-];
+/// Upper bound of the price filter. Shared by the slider, the reset action and
+/// the "are any filters active?" check so they can't drift apart.
+const double _kPriceMax = 9999;
 
 /// HomeScreen: Marketplace feed with live search, filters, and sort.
 class HomeScreen extends StatefulWidget {
@@ -61,9 +55,10 @@ class _HomeScreenState extends State<HomeScreen> {
   // ── Search & filter state ─────────────────────────────────────────────────
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
-  String _selectedCategory = 'All';
-  String _selectedCondition = 'All';
-  RangeValues _priceRange = const RangeValues(0, 9999);
+  // null means "All".
+  ListingCategory? _selectedCategory;
+  ListingCondition? _selectedCondition;
+  RangeValues _priceRange = const RangeValues(0, _kPriceMax);
   SortOption _sortOption = SortOption.newest;
   bool _showFilters = false;
 
@@ -84,81 +79,72 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ── Filtering & sorting logic ─────────────────────────────────────────────
-  List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> all) {
+  List<Listing> _applyFilters(List<Listing> all) {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    
-    var results = all.where((l) {
-      // Hide own listings from the marketplace feed
-      if (l['userId'] == currentUid) return false;
 
-      // Only active listings
-      if (l['status'] == 'sold' || l['status'] == 'hidden') return false;
+    final results = all.where((l) {
+      // Hide own listings from the marketplace feed
+      if (l.isOwnedBy(currentUid)) return false;
+
+      // Sold and moderator-hidden listings never appear in the feed
+      if (!l.status.isPubliclyVisible) return false;
 
       // Title / category text search
       if (_query.isNotEmpty) {
-        final title = (l['title'] ?? '').toString().toLowerCase();
-        final cat = (l['category'] ?? '').toString().toLowerCase();
+        final title = l.title.toLowerCase();
+        final cat = l.categoryLabel.toLowerCase();
         if (!title.contains(_query) && !cat.contains(_query)) return false;
       }
 
       // Category filter
-      if (_selectedCategory != 'All') {
-        if ((l['category'] ?? '') != _selectedCategory) return false;
+      if (_selectedCategory != null && l.category != _selectedCategory) {
+        return false;
       }
 
       // Condition filter
-      if (_selectedCondition != 'All') {
-        if ((l['condition'] ?? '') != _selectedCondition) return false;
+      if (_selectedCondition != null && l.condition != _selectedCondition) {
+        return false;
       }
 
       // Price range
-      final price = (l['price'] as num? ?? 0).toDouble();
-      if (price < _priceRange.start || price > _priceRange.end) return false;
+      if (l.price < _priceRange.start || l.price > _priceRange.end) {
+        return false;
+      }
 
       return true;
     }).toList();
 
-    // Sort
     switch (_sortOption) {
       case SortOption.newest:
         results.sort((a, b) {
-          final aT = a['createdAt'];
-          final bT = b['createdAt'];
-          if (aT == null || bT == null) return 0;
+          final aT = a.createdAt;
+          final bT = b.createdAt;
+          // A pending server timestamp is the newest thing there is.
+          if (aT == null) return bT == null ? 0 : -1;
+          if (bT == null) return 1;
           return bT.compareTo(aT);
         });
-        break;
       case SortOption.cheapest:
-        results.sort((a, b) {
-          final aP = (a['price'] as num? ?? 0).toDouble();
-          final bP = (b['price'] as num? ?? 0).toDouble();
-          return aP.compareTo(bP);
-        });
-        break;
+        results.sort((a, b) => a.price.compareTo(b.price));
       case SortOption.mostExpensive:
-        results.sort((a, b) {
-          final aP = (a['price'] as num? ?? 0).toDouble();
-          final bP = (b['price'] as num? ?? 0).toDouble();
-          return bP.compareTo(aP);
-        });
-        break;
+        results.sort((a, b) => b.price.compareTo(a.price));
     }
 
     return results;
   }
 
   bool get _hasActiveFilters =>
-      _selectedCategory != 'All' ||
-      _selectedCondition != 'All' ||
+      _selectedCategory != null ||
+      _selectedCondition != null ||
       _priceRange.start > 0 ||
-      _priceRange.end < 500 ||
+      _priceRange.end < _kPriceMax ||
       _sortOption != SortOption.newest;
 
   void _resetFilters() {
     setState(() {
-      _selectedCategory = 'All';
-      _selectedCondition = 'All';
-      _priceRange = const RangeValues(0, 500);
+      _selectedCategory = null;
+      _selectedCondition = null;
+      _priceRange = const RangeValues(0, _kPriceMax);
       _sortOption = SortOption.newest;
     });
   }
@@ -322,7 +308,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: _categories.map((cat) {
+                children: <ListingCategory?>[null, ...ListingCategory.values].map((
+                  cat,
+                ) {
                   final isActive = _selectedCategory == cat;
                   return TapBounce(
                     onTap: () => setState(() => _selectedCategory = cat),
@@ -354,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             : null,
                       ),
                       child: Text(
-                        cat,
+                        cat?.label ?? 'All',
                         style: AppTextStyles.bodyMediumDark.copyWith(
                           color: isActive
                               ? AppColors.white
@@ -483,49 +471,59 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              ..._conditions.map((c) {
-                final isSelected = _selectedCondition == c;
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedCondition = c),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? AppColors.limeGreen
-                          : AppColors.background,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isSelected
-                            ? AppColors.solidBlack
-                            : AppColors.borderGrey,
-                        width: 1.5,
-                      ),
-                      boxShadow: isSelected
-                          ? const [
-                              BoxShadow(
-                                color: AppColors.solidBlack,
-                                offset: Offset(2, 2),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Text(
-                      c,
-                      style: AppTextStyles.bodyMediumDark.copyWith(
-                        fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.w700
-                            : FontWeight.normal,
-                      ),
-                    ),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: <ListingCondition?>[
+                      null,
+                      ...ListingCondition.values,
+                    ].map((c) {
+                      final isSelected = _selectedCondition == c;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedCondition = c),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          margin: const EdgeInsets.only(right: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppColors.limeGreen
+                                : AppColors.background,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppColors.solidBlack
+                                  : AppColors.borderGrey,
+                              width: 1.5,
+                            ),
+                            boxShadow: isSelected
+                                ? const [
+                                    BoxShadow(
+                                      color: AppColors.solidBlack,
+                                      offset: Offset(2, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Text(
+                            c?.label ?? 'All',
+                            style: AppTextStyles.bodyMediumDark.copyWith(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
-                );
-              }),
+                ),
+              ),
             ],
           ),
 
@@ -563,7 +561,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: RangeSlider(
               values: _priceRange,
               min: 0,
-              max: 9999,
+              max: _kPriceMax,
               divisions: 50,
               onChanged: (v) => setState(() => _priceRange = v),
             ),
@@ -594,10 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Results list ──────────────────────────────────────────────────────────
 
-  Widget _buildResultsList(
-    List<Map<String, dynamic>> filtered,
-    int totalCount,
-  ) {
+  Widget _buildResultsList(List<Listing> filtered, int totalCount) {
     if (filtered.isEmpty) {
       return Center(
         child: Column(
@@ -736,13 +731,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Item card ─────────────────────────────────────────────────────────────
 
-  Widget _buildItemCard(BuildContext context, Map<String, dynamic> listing) {
-    final title = listing['title'] ?? 'No Title';
-    final price = '£${listing['price'] ?? '0.00'}';
-    final sellerName = listing['sellerName'] ?? 'Student';
-    final category = listing['category'] ?? '';
-    final condition = listing['condition'] ?? '';
-    final university = listing['university'] ?? '';
+  Widget _buildItemCard(BuildContext context, Listing listing) {
+    final condition = listing.condition;
 
     return CardLift(
       onTap: () => context.push('/item-details', extra: listing),
@@ -791,7 +781,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          price,
+                          listing.formattedPrice,
                           style: AppTextStyles.bodyMediumDark.copyWith(
                             color: AppColors.white,
                             fontWeight: FontWeight.w900,
@@ -800,7 +790,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     // Condition badge
-                    if (condition.isNotEmpty)
+                    if (condition != null)
                       Positioned(
                         top: 12,
                         right: 12,
@@ -810,7 +800,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: condition == 'New'
+                            color: condition == ListingCondition.likeNew
                                 ? AppColors.limeGreen
                                 : const Color(0xFFFFE4D6),
                             borderRadius: BorderRadius.circular(8),
@@ -820,7 +810,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           child: Text(
-                            condition,
+                            condition.label,
                             style: AppTextStyles.bodyMediumDark.copyWith(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
@@ -840,7 +830,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    listing.title,
                     style: AppTextStyles.bodyMediumDark.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -852,8 +842,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      if (category.isNotEmpty) _buildTag(category, true),
-                      if (university.isNotEmpty) _buildTag(university, false),
+                      _buildTag(listing.categoryLabel, true),
+                      if (listing.university.isNotEmpty)
+                        _buildTag(listing.university, false),
                     ],
                   ),
                   const Divider(height: 20),
@@ -866,7 +857,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        sellerName,
+                        listing.sellerName,
                         style: AppTextStyles.bodyMedium.copyWith(fontSize: 12),
                       ),
                       const Spacer(),

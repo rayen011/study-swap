@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../core/models/app_user.dart';
+
 abstract class ProfileState extends Equatable {
   const ProfileState();
 
@@ -12,11 +14,11 @@ class ProfileInitial extends ProfileState {}
 class ProfileLoading extends ProfileState {}
 
 class ProfileLoaded extends ProfileState {
-  final Map<String, dynamic> userData;
-  const ProfileLoaded(this.userData);
+  final AppUser user;
+  const ProfileLoaded(this.user);
 
   @override
-  List<Object?> get props => [userData];
+  List<Object?> get props => [user];
 }
 
 class ProfileError extends ProfileState {

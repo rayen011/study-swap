@@ -1,18 +1,38 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/app_user.dart';
+import '../../../core/models/message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../logic/chat_cubit.dart';
 import '../data/chat_repository.dart';
 import '../../listings/data/listing_repository.dart';
+import '../../profile/data/rating_repository.dart';
+import '../../profile/data/user_repository.dart';
 import '../widgets/rate_user_dialog.dart';
 import '../../../core/animations/app_animations.dart';
 import '../../../core/widgets/user_title_badge.dart';
 import '../../report/widgets/report_dialog.dart';
+
+/// Navigation arguments for [ChatDetailsScreen].
+///
+/// The receiver's name and id come from whichever screen opened the chat, so
+/// the header renders before the profile fetch resolves.
+class ChatDetailsArgs {
+  const ChatDetailsArgs({
+    required this.chatId,
+    required this.receiverName,
+    required this.receiverId,
+  });
+
+  final String chatId;
+  final String receiverName;
+  final String receiverId;
+}
 
 class ChatDetailsScreen extends StatefulWidget {
   final String chatId;
@@ -34,8 +54,12 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-  Map<String, dynamic>? _receiverData;
+  AppUser? _receiverData;
   bool _hasRated = false;
+
+  /// Id of the most recent inbound message this screen has cleared the badge
+  /// for, so repeat snapshots don't each trigger a write.
+  String? _lastReadMessageId;
 
   @override
   void initState() {
@@ -46,41 +70,52 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
     _checkIfAlreadyRated();
   }
 
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchReceiverData() async {
+    final userRepository = context.read<UserRepository>();
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.receiverId)
-          .get();
-      if (mounted) {
-        setState(() {
-          _receiverData = doc.data();
-        });
-      }
-    } catch (e) {
-      // Error handling
+      final user = await userRepository.getUser(widget.receiverId);
+      if (mounted) setState(() => _receiverData = user);
+    } catch (_) {
+      // A missing profile just leaves the header on its defaults.
     }
   }
 
   Future<void> _checkIfAlreadyRated() async {
+    final ratingRepository = context.read<RatingRepository>();
     try {
-      final query = await FirebaseFirestore.instance
-          .collection('reviews')
-          .where('fromId', isEqualTo: _currentUserId)
-          .where('chatId', isEqualTo: widget.chatId)
-          .limit(1)
-          .get();
-      if (mounted) {
-        setState(() {
-          _hasRated = query.docs.isNotEmpty;
-        });
-      }
-    } catch (e) {
-      // Error handling
+      final hasRated = await ratingRepository.hasRated(
+        chatId: widget.chatId,
+        toId: widget.receiverId,
+      );
+      if (mounted) setState(() => _hasRated = hasRated);
+    } catch (_) {
+      // Leave the rate button enabled; the write is idempotent by id.
     }
   }
 
-  void _markRead() {
+  /// Clears this chat's unread badge.
+  ///
+  /// Only fires when the newest inbound message is one we haven't already
+  /// cleared for. Marking on every snapshot would put a write on the chat
+  /// document each time anything in the conversation changed.
+  void _markRead([List<Message>? messages]) {
+    if (messages != null) {
+      // Messages arrive newest-first.
+      final newestInbound = messages
+          .where((m) => !m.isFrom(_currentUserId))
+          .firstOrNull;
+      if (newestInbound == null) return;
+      if (newestInbound.id == _lastReadMessageId) return;
+      _lastReadMessageId = newestInbound.id;
+    }
+
     context.read<ChatRepository>().markAsRead(widget.chatId);
   }
 
@@ -126,14 +161,12 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                     Icon(Icons.star, size: 10, color: AppColors.primaryYellow),
                     const SizedBox(width: 2),
                     Text(
-                      (_receiverData?['rating'] as num? ?? 0.0).toStringAsFixed(
-                        1,
-                      ),
+                      (_receiverData ?? AppUser.empty).formattedRating,
                       style: AppTextStyles.bodySmall.copyWith(fontSize: 10),
                     ),
                     const SizedBox(width: 8),
                     UserTitleBadge(
-                      title: _receiverData?['title'] ?? 'Freshman Trader',
+                      title: (_receiverData ?? AppUser.empty).title,
                       isCompact: true,
                     ),
                   ],
@@ -176,9 +209,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
           Expanded(
             child: BlocConsumer<MessageCubit, MessageState>(
               listener: (context, state) {
-                if (state is MessageLoaded) {
-                  _markRead();
-                }
+                if (state is MessageLoaded) _markRead(state.messages);
               },
               builder: (context, state) {
                 if (state is MessageLoading) {
@@ -196,22 +227,13 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
                       final msg = messages[index];
-                      final isMe = msg['senderId'] == _currentUserId;
-
-                      if (msg['type'] == 'deal') {
-                        return SlideIn(
-                          fromLeft: !isMe,
-                          child: _buildDealCard(msg, isMe),
-                        );
-                      }
+                      final isMe = msg.isFrom(_currentUserId);
 
                       return SlideIn(
                         fromLeft: !isMe,
-                        child: _buildMessageBubble(
-                          msg['text'],
-                          isMe,
-                          msg['timestamp'],
-                        ),
+                        child: msg.isDeal
+                            ? _buildDealCard(msg, isMe)
+                            : _buildMessageBubble(msg, isMe),
                       );
                     },
                   );
@@ -228,34 +250,42 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
 
   Future<void> _updateDeal(
     String messageId,
-    String status, {
-    Map<String, dynamic>? dealData,
-  }) async {
+    DealStatus status,
+    DealRequest deal,
+  ) async {
     final chatRepo = context.read<ChatRepository>();
     final listingRepo = context.read<ListingRepository>();
     final messageCubit = context.read<MessageCubit>();
 
-    if (status == 'completed' && dealData != null) {
+    if (status == DealStatus.completed) {
       await messageCubit.completeDeal(
         chatId: widget.chatId,
         messageId: messageId,
-        itemId: dealData['itemId'],
-        buyerId: dealData['buyerId'] ?? _currentUserId, // Logic for buyer
-        sellerId: dealData['sellerId'] ?? widget.receiverId,
+        itemId: deal.itemId,
+        buyerId: deal.buyerId.isEmpty ? _currentUserId : deal.buyerId,
+        sellerId: deal.sellerId.isEmpty ? widget.receiverId : deal.sellerId,
       );
-      _showRatingDialog();
+      if (mounted) _showRatingDialog();
       return;
     }
 
     await chatRepo.updateDealStatus(widget.chatId, messageId, status);
 
-    if (dealData != null && dealData['itemId'] != null) {
-      final listingId = dealData['itemId'];
-      if (status == 'accepted') {
-        await listingRepo.updateListingStatus(listingId, 'reserved');
-      } else if (status == 'declined') {
-        await listingRepo.updateListingStatus(listingId, 'active');
-      }
+    if (deal.itemId.isEmpty) return;
+    switch (status) {
+      case DealStatus.accepted:
+        await listingRepo.updateListingStatus(
+          deal.itemId,
+          ListingStatus.reserved,
+        );
+      case DealStatus.declined:
+        await listingRepo.updateListingStatus(
+          deal.itemId,
+          ListingStatus.active,
+        );
+      case DealStatus.pending:
+      case DealStatus.completed:
+        break;
     }
   }
 
@@ -283,12 +313,10 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
     );
   }
 
-  Widget _buildDealCard(Map<String, dynamic> msg, bool isMe) {
-    final dealData = msg['dealData'] as Map<String, dynamic>;
-    final status = dealData['status'] ?? 'pending';
-    final title = dealData['title'];
-    final price = dealData['price'];
-    final messageId = msg['id'];
+  Widget _buildDealCard(Message msg, bool isMe) {
+    final deal = msg.deal!;
+    final status = deal.status;
+    final messageId = msg.id;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
@@ -316,15 +344,16 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
           ),
           const Divider(height: 24),
           Text(
-            title,
+            deal.title,
             style: AppTextStyles.bodyMediumDark.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
-          Text('Price: £$price', style: AppTextStyles.bodyMediumDark),
+          Text('Price: ${deal.formattedPrice}',
+              style: AppTextStyles.bodyMediumDark),
           const SizedBox(height: 16),
 
-          if (status == 'pending') ...[
+          if (status == DealStatus.pending) ...[
             if (isMe)
               const Center(
                 child: Text(
@@ -337,7 +366,11 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => _updateDeal(messageId, 'declined'),
+                      onPressed: () => _updateDeal(
+                        messageId,
+                        DealStatus.declined,
+                        deal,
+                      ),
                       child: const Text('DECLINE'),
                     ),
                   ),
@@ -350,15 +383,15 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                       ),
                       onPressed: () => _updateDeal(
                         messageId,
-                        'accepted',
-                        dealData: dealData,
+                        DealStatus.accepted,
+                        deal,
                       ),
                       child: const Text('ACCEPT'),
                     ),
                   ),
                 ],
               ),
-          ] else if (status == 'accepted') ...[
+          ] else if (status == DealStatus.accepted) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(8),
@@ -379,7 +412,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
             ),
             const SizedBox(height: 12),
             // Only show completion button to the Seller
-            if (_currentUserId == dealData['sellerId'])
+            if (deal.isSeller(_currentUserId))
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primaryBlue,
@@ -392,8 +425,8 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                 ),
                 onPressed: () => _updateDeal(
                   messageId,
-                  'completed',
-                  dealData: dealData,
+                  DealStatus.completed,
+                  deal,
                 ),
                 child: const Text('MARK AS COMPLETED'),
               )
@@ -404,7 +437,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                   style: TextStyle(fontStyle: FontStyle.italic, fontSize: 12),
                 ),
               ),
-          ] else if (status == 'completed') ...[
+          ] else if (status == DealStatus.completed) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(8),
@@ -444,7 +477,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                 ],
               ),
             ),
-          ] else if (status == 'declined') ...[
+          ] else if (status == DealStatus.declined) ...[
             const Center(
               child: Text(
                 '❌ Deal Declined',
@@ -457,16 +490,9 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isMe, dynamic timestamp) {
-    String time = '';
-    if (timestamp != null && timestamp is DateTime) {
-      time = DateFormat('HH:mm').format(timestamp);
-    } else if (timestamp != null) {
-      // Handle Firestore Timestamp
-      try {
-        time = DateFormat('HH:mm').format(timestamp.toDate());
-      } catch (_) {}
-    }
+  Widget _buildMessageBubble(Message msg, bool isMe) {
+    final sentAt = msg.sentAt;
+    final time = sentAt == null ? '' : DateFormat('HH:mm').format(sentAt);
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -493,7 +519,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               : CrossAxisAlignment.start,
           children: [
             Text(
-              text,
+              msg.text,
               style: AppTextStyles.bodyMedium.copyWith(
                 color: isMe ? AppColors.white : AppColors.solidBlack,
               ),
@@ -504,7 +530,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               style: TextStyle(
                 fontSize: 8,
                 color: (isMe ? AppColors.white : AppColors.textGrey)
-                    .withOpacity(0.7),
+                    .withValues(alpha: 0.7),
               ),
             ),
           ],

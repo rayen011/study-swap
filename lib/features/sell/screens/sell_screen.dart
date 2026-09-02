@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/listing_options.dart';
+import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -22,8 +24,8 @@ class _SellScreenState extends State<SellScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
-  String _selectedCategory = 'TEXTBOOKS';
-  String _selectedCondition = 'Like New';
+  ListingCategory _selectedCategory = ListingCategory.textbooks;
+  ListingCondition _selectedCondition = ListingCondition.likeNew;
 
   @override
   void initState() {
@@ -31,14 +33,27 @@ class _SellScreenState extends State<SellScreen> {
     _loadDraft();
   }
 
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _priceController.dispose();
+    _descController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadDraft() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _titleController.text = prefs.getString('draft_title') ?? '';
       _priceController.text = prefs.getString('draft_price') ?? '';
       _descController.text = prefs.getString('draft_desc') ?? '';
-      _selectedCategory = prefs.getString('draft_category') ?? 'TEXTBOOKS';
-      _selectedCondition = prefs.getString('draft_condition') ?? 'Like New';
+      _selectedCategory =
+          ListingCategory.tryParse(prefs.getString('draft_category')) ??
+          ListingCategory.textbooks;
+      _selectedCondition =
+          ListingCondition.tryParse(prefs.getString('draft_condition')) ??
+          ListingCondition.likeNew;
     });
   }
 
@@ -47,9 +62,9 @@ class _SellScreenState extends State<SellScreen> {
     await prefs.setString('draft_title', _titleController.text);
     await prefs.setString('draft_price', _priceController.text);
     await prefs.setString('draft_desc', _descController.text);
-    await prefs.setString('draft_category', _selectedCategory);
-    await prefs.setString('draft_condition', _selectedCondition);
-    
+    await prefs.setString('draft_category', _selectedCategory.wire);
+    await prefs.setString('draft_condition', _selectedCondition.wire);
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -165,12 +180,9 @@ class _SellScreenState extends State<SellScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: [
-                  _buildCategoryPill('TEXTBOOKS'),
-                  _buildCategoryPill('ELECTRONICS'),
-                  _buildCategoryPill('HOUSING'),
-                  _buildCategoryPill('OTHER'),
-                ],
+                children: ListingCategory.values
+                    .map(_buildCategoryPill)
+                    .toList(),
               ),
               
               AppSizes.gapHLG,
@@ -217,23 +229,23 @@ class _SellScreenState extends State<SellScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
+                  child: DropdownButton<ListingCondition>(
                     value: _selectedCondition,
                     isExpanded: true,
                     icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.solidBlack),
                     style: AppTextStyles.bodyMediumDark,
-                    onChanged: (String? newValue) {
+                    onChanged: (ListingCondition? newValue) {
                       if (newValue != null) {
                         setState(() {
                           _selectedCondition = newValue;
                         });
                       }
                     },
-                    items: <String>['Like New', 'Good', 'Fair', 'Poor']
-                        .map<DropdownMenuItem<String>>((String value) {
-                      return DropdownMenuItem<String>(
+                    items: ListingCondition.values
+                        .map<DropdownMenuItem<ListingCondition>>((value) {
+                      return DropdownMenuItem<ListingCondition>(
                         value: value,
-                        child: Text(value),
+                        child: Text(value.label),
                       );
                     }).toList(),
                   ),
@@ -269,10 +281,8 @@ class _SellScreenState extends State<SellScreen> {
               // Marketplace Network
               BlocBuilder<ProfileCubit, ProfileState>(
                 builder: (context, state) {
-                  String uni = 'none';
-                  if (state is ProfileLoaded) {
-                    uni = state.userData['university'] ?? 'none';
-                  }
+                  final uni =
+                      state is ProfileLoaded ? state.user.university : 'none';
                   
                   return Container(
                     padding: const EdgeInsets.all(16),
@@ -343,26 +353,37 @@ class _SellScreenState extends State<SellScreen> {
                     onPressed: state is ListingLoading
                         ? null
                         : () {
-                            final profileState = context.read<ProfileCubit>().state;
-                            String uni = 'none';
-                            if (profileState is ProfileLoaded) {
-                              uni = profileState.userData['university'] ?? 'none';
-                            }
+                            final profileState =
+                                context.read<ProfileCubit>().state;
+                            final uni = profileState is ProfileLoaded
+                                ? profileState.user.university
+                                : 'none';
 
-                            if (_titleController.text.isEmpty || _priceController.text.isEmpty) {
+                            final title = _titleController.text.trim();
+                            if (title.isEmpty || _priceController.text.trim().isEmpty) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Please fill all required fields (*)'), backgroundColor: Colors.red),
                               );
                               return;
                             }
 
+                            final price = double.tryParse(_priceController.text.trim());
+                            if (price == null || price < 0 || price > 99999) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Enter a price between £0 and £99,999'), backgroundColor: Colors.red),
+                              );
+                              return;
+                            }
+
                             context.read<ListingCubit>().createListing(
-                                  title: _titleController.text,
-                                  description: _descController.text,
-                                  price: double.tryParse(_priceController.text) ?? 0.0,
-                                  category: _selectedCategory,
-                                  university: uni,
-                                  condition: _selectedCondition,
+                                  ListingDraft(
+                                    title: title,
+                                    description: _descController.text.trim(),
+                                    price: price,
+                                    category: _selectedCategory,
+                                    condition: _selectedCondition,
+                                    university: uni,
+                                  ),
                                 );
                           },
                   );
@@ -403,12 +424,12 @@ class _SellScreenState extends State<SellScreen> {
     );
   }
 
-  Widget _buildCategoryPill(String label) {
-    final isActive = _selectedCategory == label;
+  Widget _buildCategoryPill(ListingCategory category) {
+    final isActive = _selectedCategory == category;
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedCategory = label;
+          _selectedCategory = category;
         });
       },
       child: Container(
@@ -419,7 +440,7 @@ class _SellScreenState extends State<SellScreen> {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
-          label,
+          category.label.toUpperCase(),
           style: AppTextStyles.bodyMediumDark.copyWith(
             color: isActive ? AppColors.white : AppColors.solidBlack,
             fontSize: 12,

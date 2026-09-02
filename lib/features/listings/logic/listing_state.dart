@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../core/models/listing.dart';
+
 abstract class ListingState extends Equatable {
   const ListingState();
 
@@ -12,7 +14,7 @@ class ListingInitial extends ListingState {}
 class ListingLoading extends ListingState {}
 
 class ListingLoaded extends ListingState {
-  final List<Map<String, dynamic>> listings;
+  final List<Listing> listings;
   const ListingLoaded(this.listings);
 
   @override

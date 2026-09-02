@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/models/report.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -26,7 +27,7 @@ class ModerationQueueScreen extends StatelessWidget {
           onPressed: () => context.pop(),
         ),
       ),
-      body: StreamBuilder<List<Map<String, dynamic>>>(
+      body: StreamBuilder<List<Report>>(
         stream: reportRepo.getPendingReports(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -66,17 +67,15 @@ class ModerationQueueScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildReportCard(BuildContext context, Map<String, dynamic> report) {
-    final type = report['targetType'] ?? 'Unknown';
-    final reason = report['reason'] ?? 'No reason';
-    final createdAt = report['createdAt'] as dynamic;
-    String dateStr = '';
-    if (createdAt != null) {
-      dateStr = DateFormat('MMM d, HH:mm').format(createdAt.toDate());
-    }
+  Widget _buildReportCard(BuildContext context, Report report) {
+    final createdAt = report.createdAt;
+    final dateStr = createdAt == null
+        ? ''
+        : DateFormat('MMM d, HH:mm').format(createdAt);
 
     return GestureDetector(
-      onTap: () => context.push('/moderation/report/${report['id']}', extra: report),
+      onTap: () =>
+          context.push('/moderation/report/${report.id}', extra: report),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -96,12 +95,14 @@ class ModerationQueueScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: type == 'user' ? const Color(0xFFE0E7FF) : const Color(0xFFFEF3C7),
+                    color: report.targetType.isUser
+                        ? const Color(0xFFE0E7FF)
+                        : const Color(0xFFFEF3C7),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: AppColors.solidBlack, width: 1),
                   ),
                   child: Text(
-                    type.toUpperCase(),
+                    report.targetType.label.toUpperCase(),
                     style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -109,11 +110,12 @@ class ModerationQueueScreen extends StatelessWidget {
               ],
             ),
             AppSizes.gapHMD,
-            Text(reason, style: AppTextStyles.heading2.copyWith(fontSize: 16)),
-            if (report['additionalNote']?.isNotEmpty == true) ...[
+            Text(report.reason,
+                style: AppTextStyles.heading2.copyWith(fontSize: 16)),
+            if (report.hasNote) ...[
               AppSizes.gapHSm,
               Text(
-                report['additionalNote'],
+                report.additionalNote,
                 style: AppTextStyles.bodyMedium,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

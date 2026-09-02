@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../core/models/report.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../data/report_repository.dart';
 
-enum ReportTargetType { user, listing }
+// ReportTargetType now lives with the Report model so the repository, the
+// moderation screens and this dialog all share one definition.
+export '../../../core/models/report.dart' show ReportTargetType;
 
 /// Shows a bottom-sheet report dialog.
 /// Call via [ReportDialog.show].
@@ -78,19 +82,23 @@ class _ReportDialogState extends State<ReportDialog> {
     if (_selectedReason == null) return;
     setState(() => _submitting = true);
 
+    // Captured up front: the confirmation is shown after this sheet has been
+    // popped, at which point its own context is gone.
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final reportRepository = context.read<ReportRepository>();
+
     try {
-      await ReportRepository().submitReport(
+      await reportRepository.submitReport(
         targetId: widget.targetId,
-        targetType: widget.targetType == ReportTargetType.user
-            ? 'user'
-            : 'listing',
+        targetType: widget.targetType,
         reason: _selectedReason!,
         additionalNote: _noteController.text.trim(),
       );
 
       if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        navigator.pop();
+        messenger.showSnackBar(
           SnackBar(
             content: Row(
               children: [
@@ -105,12 +113,10 @@ class _ReportDialogState extends State<ReportDialog> {
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit: $e')),
-        );
-        setState(() => _submitting = false);
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to submit: $e')),
+      );
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
