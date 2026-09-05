@@ -8,11 +8,14 @@ class ProfileCubit extends Cubit<ProfileState> {
 
   ProfileCubit(this._userRepository) : super(ProfileInitial());
 
-  /// Fetches the current user's profile data.
+  /// Fetches the current user's profile, rebuilding it if it has gone missing.
+  ///
+  /// A signed-in account with no profile document used to dead-end here — see
+  /// `UserRepository.ensureProfile` for how that state arises.
   Future<void> loadProfile() async {
     emit(ProfileLoading());
     try {
-      final user = await _userRepository.getCurrentUser();
+      final user = await _userRepository.ensureProfile();
       if (user != null) {
         emit(ProfileLoaded(user));
       } else {

@@ -48,3 +48,7 @@ app.*.map.json
 functions/node_modules/
 functions/lib/
 functions/serviceAccountKey.json
+
+# Service account keys — full admin access to the Firebase project.
+serviceAccountKey.json
+**/serviceAccountKey.json

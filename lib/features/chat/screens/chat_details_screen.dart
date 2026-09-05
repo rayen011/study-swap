@@ -8,6 +8,7 @@ import '../../../core/models/message.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_theme.dart';
 import '../logic/chat_cubit.dart';
 import '../data/chat_repository.dart';
 import '../../listings/data/listing_repository.dart';
@@ -16,6 +17,7 @@ import '../../profile/data/user_repository.dart';
 import '../widgets/rate_user_dialog.dart';
 import '../../../core/animations/app_animations.dart';
 import '../../../core/widgets/user_title_badge.dart';
+import '../../../core/widgets/error_state_view.dart';
 import '../../report/widgets/report_dialog.dart';
 
 /// Navigation arguments for [ChatDetailsScreen].
@@ -215,7 +217,12 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (state is MessageError) {
-                  return Center(child: Text(state.message));
+                  return ErrorStateView(
+                    error: state.message,
+                    onRetry: () => context.read<MessageCubit>().fetchMessages(
+                      widget.chatId,
+                    ),
+                  );
                 }
                 if (state is MessageLoaded) {
                   final messages = state.messages;
@@ -560,9 +567,8 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
                 controller: _messageController,
-                decoration: const InputDecoration(
+                decoration: AppTheme.bareInput(
                   hintText: 'Type a message...',
-                  border: InputBorder.none,
                 ),
               ),
             ),

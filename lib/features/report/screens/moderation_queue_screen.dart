@@ -6,6 +6,7 @@ import '../../../core/models/report.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/error_state_view.dart';
 import '../data/report_repository.dart';
 
 class ModerationQueueScreen extends StatelessWidget {
@@ -34,7 +35,10 @@ class ModerationQueueScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return ErrorStateView(
+              error: '${snapshot.error}',
+              icon: Icons.gpp_maybe_outlined,
+            );
           }
 
           final reports = snapshot.data ?? [];

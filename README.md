@@ -6,7 +6,7 @@ Firebase, with a reputation system that survives a hostile client.
 [![CI](https://github.com/rayen011/study-swap/actions/workflows/ci.yml/badge.svg)](https://github.com/rayen011/study-swap/actions/workflows/ci.yml)
 ![Flutter](https://img.shields.io/badge/Flutter-3.38-02569B?logo=flutter&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-Auth%20·%20Firestore%20·%20Storage%20·%20Functions-FFCA28?logo=firebase&logoColor=black)
-![Tests](https://img.shields.io/badge/tests-82%20passing-2C6A45)
+![Tests](https://img.shields.io/badge/tests-82%20Dart%20%C2%B7%2070%20rules-2C6A45)
 
 <!-- Drop captures into docs/screenshots/ with these names and the row renders. -->
 <p align="center">
@@ -40,6 +40,13 @@ deal complete, can't review the same deal twice, and can't touch their own ratin
   message type
 - **Reputation** — ratings, review history, and titles that climb from *Freshman Trader*
   to *Campus Pro* with completed deals
+- **Credits** — bidding power earned by completing trades, never bought and never cashed
+  out. The foundation of an auction feature; see *Known gaps*
+- **Auctions** — a listing can be sold to the highest bidder instead of at a fixed price,
+  with a hidden reserve, anti-snipe extensions, and a scheduled function that closes the
+  floor on time. Bidding costs credits to hold, so an unbacked bid is arithmetically
+  impossible. The sell form offers it as a mode; the room is a full-screen route with the
+  tab bar gone — deliberately a place you enter, not a sixth tab
 - **Moderation** — report users or listings; moderators get a queue, and can hide a
   listing or suspend an account
 
@@ -83,13 +90,25 @@ can be believed.**
 | --- | --- |
 | Moderator access | An auth custom claim, never a Firestore field — a client-written field isn't an authorization decision |
 | Ratings, deal counts, titles | Owned by Cloud Functions; they appear in no client-writable shape in the rules |
+| Credit balances | Same, and for a sharper reason — credits are what a bid will cost, so a self-written balance is a self-written bid ceiling. The one exception is signup, where the rules accept a single fixed opening value |
+| Auctions and bids | No client writes any part of either. Bidding is a callable, closing is scheduled, and both run as the Admin SDK |
+| Shill bidding | A seller cannot bid on their own auction, checked inside the same transaction that records the bid |
+| Opening a floor | A callable that checks the listing is yours, active, and not already up. The rules pin a client-written listing to `saleMode: 'fixed'` and forbid `auctionId` outright |
+| Hidden reserve prices | Rules can deny a document but cannot hide a field, so the reserve lives in a subcollection only the seller can read. The auction itself carries whether one exists, never what it is |
 | One review per deal | Deterministic document ids, create-only. A second review collides rather than overwriting |
 | Deal transitions | Accept, decline and complete all require `uid() == dealData.sellerId` |
 | Suspension | Rules block writes; a trigger disables the Auth account so reads stop too |
 | Listing photos | Storage rules check ownership from the path — Storage rules can't read Firestore |
 
 [`firestore.rules`](firestore.rules), [`storage.rules`](storage.rules) and
-[`functions/`](functions/) are all in the repo. The rules are the interesting read.
+[`functions/`](functions/) are all in the repo — and all of it is tested.
+[`rules-tests/`](rules-tests/) runs 94 assertions against the Firebase emulators, from
+"a user can't write their own rating" to "only the seller can complete a deal".
+
+Those tests were themselves mutation-tested: rules were deliberately loosened to
+confirm the suite noticed. It did, including a case that wasn't predicted. An
+`assertFails` test passes just as happily when the operation fails for the wrong reason,
+so a green run on a security suite proves less than it looks like.
 
 ## Tech stack
 
@@ -124,6 +143,20 @@ firebase deploy --only firestore,storage,functions
 flutter run
 ```
 
+### Seeding demo data
+
+The feed hides your own listings, so a project with one account looks empty no
+matter how much you post. To get something to look at:
+
+```bash
+npm --prefix tools install
+npm --prefix tools run seed
+```
+
+Creates three demo members, twelve listings, a conversation with a completed
+deal, and two reviews. Needs a service account key — see
+[tools/README.md](tools/README.md).
+
 ### Becoming a moderator
 
 `setModeratorRole` requires the caller to already be one, so the first has to be granted
@@ -133,11 +166,31 @@ afterwards — a new claim only reaches an existing token on refresh.
 ## Tests
 
 ```bash
-flutter test
+flutter test                              # 212 Dart tests
+npm --prefix rules-tests run emulate      # 94 security rules tests (needs JDK 21+)
+npm --prefix functions run test:emulate   # 71 Cloud Functions tests (needs JDK 21+)
 ```
 
-82 tests. The cubit suites use `bloc_test` with mocked repositories; the rest cover model
-parsing (including legacy and malformed documents) and form validation.
+The cubit suites use `bloc_test` with mocked repositories; the rest cover model parsing
+(including legacy and malformed documents) and form validation. The rules suite runs
+against the Firestore and Storage emulators — see
+[rules-tests/README.md](rules-tests/README.md).
+
+The functions suite runs the real Admin SDK against a real Firestore emulator rather
+than a mocked one. What is worth testing about the auction closer is that a transaction
+applies whole or not at all — a bidder whose auction closed but whose stake stayed
+locked has lost credits to a bug — and a mock would happily lie about that. It is also
+where two people bidding the same amount in the same instant can actually be raced
+against each other, which is the failure the whole feature turns on. Those tests were
+mutation-tested too: four separate loosenings of the closer and the bid function each
+broke exactly the tests written to catch them.
+
+One test reads a different language. The credit amounts live in
+[`functions/src/credits.ts`](functions/src/credits.ts), because the server is what
+writes balances, but the app needs the same numbers to explain them — so
+`credit_rules_test.dart` parses the TypeScript and fails if the Dart mirror drifts, and
+also checks the opening balance against the literal in `firestore.rules`. Duplication
+that buys something gets a test instead of a refactor.
 
 Several encode invariants rather than behaviour — an unrecognised report status must
 default to *pending* so a report can't silently vanish from the moderation queue, and
@@ -173,6 +226,12 @@ neo-brutalist shadow becomes in the dark is a design decision, not a find-and-re
 - `applicationId` is still `com.example.studyswap`, and release builds sign with the
   debug key
 - Meetup location is a placeholder rather than a real campus picker
+- Credits are earned but not yet spent — bidding itself is the next piece of work
+- The auction handoff isn't built: a won auction sets a winner but doesn't yet open the
+  chat and drop in the deal card
+- No push notifications, which an auction needs more than anything else here — "you've
+  been outbid" is most of what makes bidding worth returning to
+- No scheduled function runs on the Spark plan, so the auction closer needs Blaze
 
 ---
 

@@ -7,6 +7,7 @@ import '../../../core/models/chat_summary.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/error_state_view.dart';
 import '../logic/chat_cubit.dart';
 import 'chat_details_screen.dart';
 
@@ -51,7 +52,11 @@ class _ChatScreenState extends State<ChatScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (state is ChatError) {
-            return Center(child: Text(state.message));
+            return ErrorStateView(
+              error: state.message,
+              icon: Icons.chat_bubble_outline,
+              onRetry: () => context.read<ChatCubit>().fetchChats(),
+            );
           }
           if (state is ChatLoaded) {
             if (state.chats.isEmpty) {

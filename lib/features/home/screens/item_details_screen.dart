@@ -3,10 +3,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/listing_options.dart';
 import '../../../core/models/app_user.dart';
 import '../../../core/models/listing.dart';
+import '../../listings/widgets/listing_owner_actions.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/custom_button.dart';
+import '../../../core/widgets/listing_gallery.dart';
 import '../../../core/widgets/listing_image.dart';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -389,7 +391,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                 final label = _isCreatingChat
                                     ? 'PREPARING DEAL...'
                                     : isMine
-                                    ? 'YOUR LISTING'
+                                    ? 'MANAGE LISTING'
                                     : isSold
                                     ? 'ITEM SOLD'
                                     : l.status.acceptsDeals
@@ -410,14 +412,23 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                                         )
                                       : Icon(
                                           isMine
-                                              ? Icons.person
+                                              ? Icons.tune_rounded
                                               : isSold
                                               ? Icons.block
                                               : Icons.handshake_outlined,
                                           color: AppColors.white,
                                           size: 20,
                                         ),
-                                  onPressed: _isCreatingChat || isSold || isMine
+                                  // Your own listing is not a dead end: the
+                                  // button becomes the way to manage it.
+                                  onPressed: _isCreatingChat
+                                      ? null
+                                      : isMine
+                                      ? () => showListingOwnerActions(
+                                          context: context,
+                                          listing: l,
+                                        )
+                                      : isSold
                                       ? null
                                       : () => l.status.acceptsDeals
                                             ? _showSafetyPopup(l)
@@ -694,41 +705,16 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     return SizedBox(
       height: height,
       width: double.infinity,
-      child: Stack(
-        children: [
-          PageView.builder(
-            controller: _galleryController,
-            itemCount: listing.imageUrls.length,
-            onPageChanged: (index) => setState(() => _galleryIndex = index),
-            itemBuilder: (context, index) => ListingImage(
-              url: listing.imageUrls[index],
-              placeholderIconSize: 64,
-              placeholderColor: const Color(0xFF6B8E9B),
-            ),
-          ),
-          if (listing.imageUrls.length > 1)
-            Positioned(
-              bottom: 16,
-              right: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.solidBlack.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${_galleryIndex + 1} / ${listing.imageUrls.length}',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
+      // Shares ListingGallery with the feed cards; the counter suits a
+      // full-bleed hero, and the thumbnail strip below drives the same
+      // controller.
+      child: ListingGallery(
+        imageUrls: listing.imageUrls,
+        indicator: GalleryIndicator.counter,
+        controller: _galleryController,
+        onPageChanged: (index) => setState(() => _galleryIndex = index),
+        placeholderIconSize: 64,
+        placeholderColor: const Color(0xFF6B8E9B),
       ),
     );
   }

@@ -13,9 +13,10 @@ rules_version = '2';
 // The user must sign out and back in (or call getIdToken(true)) for a new
 // claim to appear in their token.
 //
-// Reputation — rating, ratingCount, dealCount, title — and suspension are
-// owned by Cloud Functions (see functions/src/index.ts) and appear in no
-// client-writable shape below. The Admin SDK bypasses these rules, which is
+// Reputation — rating, ratingCount, dealCount, title — credits and suspension
+// are owned by Cloud Functions (see functions/src/index.ts) and appear in no
+// client-writable shape below. `auctions` goes further still: no client writes
+// any part of it, because everyone in an auction wants to win. The Admin SDK bypasses these rules, which is
 // what lets the triggers write fields nobody else can.
 
 service cloud.firestore {
@@ -74,7 +75,8 @@ service cloud.firestore {
       allow create: if isSelf(userId)
         && request.resource.data.keys().hasOnly([
              'fullName', 'email', 'university', 'rating', 'ratingCount',
-             'dealCount', 'title', 'role', 'createdAt'
+             'dealCount', 'title', 'credits', 'creditsLocked', 'role',
+             'createdAt'
            ])
         // A new account can never mint its own privileges or reputation.
         && request.resource.data.role == 'user'
@@ -82,6 +84,11 @@ service cloud.firestore {
         && request.resource.data.ratingCount == 0
         && request.resource.data.dealCount == 0
         && request.resource.data.title == 'Freshman Trader'
+        // The opening credit balance is a fixed number, so writing it is not a
+        // choice — 50 is the only value that passes. Every later change to
+        // either field comes from a trigger; see credits.ts.
+        && request.resource.data.credits == 50
+        && request.resource.data.creditsLocked == 0
         && request.resource.data.fullName is string
         && request.resource.data.fullName.size() > 0
         && request.resource.data.fullName.size() <= 80
@@ -105,8 +112,9 @@ service cloud.firestore {
 
       // Only two client-writable shapes: the owner editing their display
       // fields, and a moderator suspending an account. `role`, `rating`,
-      // `ratingCount`, `dealCount` and `title` appear in neither, so no client
-      // can touch them — onReviewCreated and onDealCompleted own them.
+      // `ratingCount`, `dealCount`, `title`, `credits` and `creditsLocked`
+      // appear in neither, so no client can touch them — onReviewCreated and
+      // onDealCompleted own them.
       allow update: if isProfileEdit() || isModerationUpdate();
 
       allow delete: if false;
@@ -133,12 +141,31 @@ service cloud.firestore {
         && request.resource.data.price >= 0
         && request.resource.data.price <= 99999
         && request.resource.data.category is string
-        && request.resource.data.condition is string;
+        && request.resource.data.condition is string
+        // A listing is always posted at a fixed price. Turning one into an
+        // auction is `createAuctionCallable`'s job, and the link back to the
+        // auction is written by that function alone — a client that could set
+        // `auctionId` could point its listing at somebody else's floor.
+        && (!('saleMode' in request.resource.data)
+            || request.resource.data.saleMode == 'fixed')
+        && !('auctionId' in request.resource.data);
+
+      // A listing with a floor open on it is frozen. Bidders committed
+      // credits against a title, a photo and a price; changing any of those
+      // underneath them — or deleting the item outright — is the one thing an
+      // auction absolutely cannot allow.
+      function hasOpenFloor() {
+        return 'auctionId' in resource.data;
+      }
 
       function isOwnerEdit() {
         return signedIn()
           && resource.data.userId == uid()
+          && !hasOpenFloor()
           && request.resource.data.userId == resource.data.userId
+          // `saleMode` and `auctionId` are absent on purpose: once a floor is
+          // open, editing the price out from under the bidders is exactly what
+          // must not be possible.
           && onlyChanged([
                'title', 'description', 'price', 'category', 'condition',
                'university', 'imageUrl', 'imageUrls', 'status'
@@ -159,7 +186,11 @@ service cloud.firestore {
 
       allow update: if isOwnerEdit() || isModerationHide();
 
-      allow delete: if (signedIn() && resource.data.userId == uid())
+      // Moderators can still remove one: a listing that needs taking down
+      // needs taking down, and the auction's own stakes are released by the
+      // closer when its document goes.
+      allow delete: if (signedIn() && resource.data.userId == uid()
+                        && !hasOpenFloor())
         || isModerator();
     }
 
@@ -222,6 +253,39 @@ service cloud.firestore {
           && uid() == resource.data.dealData.sellerId;
 
         allow delete: if false;
+      }
+    }
+
+    // ── auctions ──────────────────────────────────────────────────────────
+
+    // The most locked-down collection in the app, and deliberately so: an
+    // auction is the one place where everybody involved actively wants to win,
+    // so no client writes any part of it. Placing a bid is a callable function
+    // (`placeBid`); closing is a scheduled one. Both run as the Admin SDK,
+    // which bypasses these rules entirely.
+    match /auctions/{auctionId} {
+      allow read: if signedIn();
+      allow write: if false;
+
+      // The reserve price, kept off the auction document on purpose.
+      //
+      // Rules can deny a document but cannot hide a field. A reserve stored on
+      // the auction would be readable by every bidder who opened a network
+      // inspector — which is the same as not having a hidden reserve at all.
+      // Here, only the seller can read it, and the closer reads it as admin.
+      match /private/{document} {
+        allow read: if signedIn()
+          && get(/databases/$(database)/documents/auctions/$(auctionId))
+               .data.sellerId == uid();
+        allow write: if false;
+      }
+
+      // Bid history is public to signed-in members — being able to see you
+      // were outbid, by how much and when, is most of what makes an auction
+      // legible. Writing one is the callable's job.
+      match /bids/{bidId} {
+        allow read: if signedIn();
+        allow write: if false;
       }
     }
 

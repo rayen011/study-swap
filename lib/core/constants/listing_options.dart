@@ -68,6 +68,13 @@ enum ListingStatus {
       this == ListingStatus.active || this == ListingStatus.reserved;
 
   /// Whether a buyer can still open a deal on it.
+  /// Whether a seller may set this themselves.
+  ///
+  /// `sold` is owned by `onDealCompleted` and `hidden` by moderation, so the
+  /// two a seller controls are the two the rules accept from them.
+  bool get isOwnerSettable =>
+      this == ListingStatus.active || this == ListingStatus.reserved;
+
   bool get acceptsDeals => this == ListingStatus.active;
 
   /// Display label for badges and overlays.
@@ -147,3 +154,32 @@ T? _lookup<T>(
 
 String _normalise(String value) =>
     value.trim().toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
+
+/// How a listing is being sold.
+///
+/// The wire value lives on the listing so the feed can badge an auction
+/// without reading the auction document. Only `createAuctionCallable` may set
+/// [SaleMode.auction] — `firestore.rules` pins a client-written listing to
+/// [SaleMode.fixed].
+enum SaleMode {
+  fixed('fixed', 'Fixed price'),
+  auction('auction', 'Let the room decide')
+  ;
+
+  const SaleMode(this.wire, this.label);
+
+  final String wire;
+  final String label;
+
+  static SaleMode fromWire(Object? value) {
+    if (value is String) {
+      for (final mode in values) {
+        if (mode.wire == value) return mode;
+      }
+    }
+    // Every listing written before auctions existed is a fixed-price one.
+    return SaleMode.fixed;
+  }
+
+  bool get isAuction => this == SaleMode.auction;
+}

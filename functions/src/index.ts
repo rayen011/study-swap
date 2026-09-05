@@ -7,6 +7,10 @@
  * themselves a 5.0 average and the top badge with a single write. Those fields
  * are now denied to every client in `firestore.rules` and owned by the
  * triggers below.
+ *
+ * Credits belong to the same category and for a sharper reason: they are what
+ * a bid costs, so a client that could write its own balance could bid any
+ * number it liked. See `credits.ts`.
  */
 
 import { initializeApp } from "firebase-admin/app";
@@ -16,6 +20,14 @@ import { getAuth } from "firebase-admin/auth";
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
+
+import { CREDITS, creditsForReview } from "./credits";
+
+// The auction floor: the function that closes it, and the one thing a client
+// is allowed to ask for. Re-exported so Firebase finds them — only what the
+// entry point exports gets deployed.
+export { closeExpiredAuctions, createAuctionCallable } from "./auctions";
+export { placeBidCallable } from "./bids";
 
 initializeApp();
 
@@ -76,7 +88,16 @@ export const onReviewCreated = onDocumentCreated(
       const nextCount = currentCount + 1;
       const nextAverage = (currentAverage * currentCount + clamped) / nextCount;
 
-      tx.update(userRef, { rating: nextAverage, ratingCount: nextCount });
+      // A good review is worth bidding power. Awarded in the same transaction
+      // as the average so a member can never end up rated but uncredited.
+      const award = creditsForReview(clamped);
+      const currentCredits = typeof data.credits === "number" ? data.credits : 0;
+
+      tx.update(userRef, {
+        rating: nextAverage,
+        ratingCount: nextCount,
+        credits: currentCredits + award,
+      });
     });
 
     logger.info("Rating aggregate updated", { toId });
@@ -130,15 +151,23 @@ export const onDealCompleted = onDocumentUpdated(
         tx.get(sellerRef),
       ]);
 
-      for (const [ref, snap] of [
-        [buyerRef, buyerSnap],
-        [sellerRef, sellerSnap],
+      // The seller's award is larger: they carry more of a handover's risk.
+      for (const [ref, snap, award] of [
+        [buyerRef, buyerSnap, CREDITS.buyerCompletion],
+        [sellerRef, sellerSnap, CREDITS.sellerCompletion],
       ] as const) {
         if (!snap.exists) continue;
 
-        const current = snap.data()?.dealCount;
-        const next = (typeof current === "number" ? current : 0) + 1;
-        tx.update(ref, { dealCount: next, title: titleForDeals(next) });
+        const data = snap.data() ?? {};
+        const current = typeof data.dealCount === "number" ? data.dealCount : 0;
+        const credits = typeof data.credits === "number" ? data.credits : 0;
+        const next = current + 1;
+
+        tx.update(ref, {
+          dealCount: next,
+          title: titleForDeals(next),
+          credits: credits + award,
+        });
       }
 
       if (listingRef) {

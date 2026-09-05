@@ -18,6 +18,8 @@ class Listing extends Equatable {
     required this.sellerName,
     required this.imageUrls,
     required this.status,
+    required this.saleMode,
+    required this.auctionId,
     required this.createdAt,
   });
 
@@ -41,6 +43,13 @@ class Listing extends Equatable {
 
   final ListingStatus status;
 
+  /// Fixed price, or up for bids. Written by the client as fixed and flipped
+  /// to auction by `createAuctionCallable` — never by the app.
+  final SaleMode saleMode;
+
+  /// The floor this listing is being sold on, once one is open.
+  final String? auctionId;
+
   /// Null while the server timestamp is still pending on a just-written doc.
   final DateTime? createdAt;
 
@@ -57,6 +66,10 @@ class Listing extends Equatable {
       sellerName: asString(data['sellerName'], fallback: 'Student'),
       imageUrls: _readImageUrls(data),
       status: ListingStatus.fromWire(data['status']),
+      saleMode: SaleMode.fromWire(data['saleMode']),
+      auctionId: data['auctionId'] is String
+          ? data['auctionId'] as String
+          : null,
       createdAt: asDate(data['createdAt']),
     );
   }
@@ -96,6 +109,9 @@ class Listing extends Equatable {
 
   bool isOwnedBy(String? uid) => uid != null && uid == userId;
 
+  /// Up for bids, with a floor to open.
+  bool get isAuction => saleMode.isAuction && auctionId != null;
+
   @override
   List<Object?> get props => [
     id,
@@ -109,6 +125,8 @@ class Listing extends Equatable {
     sellerName,
     imageUrls,
     status,
+    saleMode,
+    auctionId,
     createdAt,
   ];
 }
@@ -146,6 +164,32 @@ class ListingDraft {
     'university': university,
     'imageUrls': imageUrls,
   };
+
+  /// The fields an owner may change on a listing that already exists.
+  ///
+  /// Deliberately narrower than [toMap]: `firestore.rules` accepts only these
+  /// keys from a client, and sending anything else fails the whole write.
+  /// `userId`, `sellerName`, `createdAt` and `status` are not editable here —
+  /// status has its own path, and the rest are not the seller's to change.
+  Map<String, dynamic> toEditMap() => {
+    'title': title,
+    'description': description,
+    'price': price,
+    'category': category.wire,
+    'condition': condition.wire,
+    'imageUrls': imageUrls,
+  };
+
+  /// Rebuilds a draft from a listing, for prefilling the edit form.
+  factory ListingDraft.from(Listing listing) => ListingDraft(
+    title: listing.title,
+    description: listing.description,
+    price: listing.price,
+    category: listing.category ?? ListingCategory.other,
+    condition: listing.condition ?? ListingCondition.good,
+    university: listing.university,
+    imageUrls: listing.imageUrls,
+  );
 
   /// Returns a copy carrying the URLs produced by the image upload, which
   /// only exist after the files have been sent to Cloud Storage.

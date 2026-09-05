@@ -12,7 +12,11 @@ import '../../../core/models/listing_filter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/listing_image.dart';
+import '../../../core/theme/room_colors.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/listing_gallery.dart';
+import '../../../core/widgets/error_state_view.dart';
+import '../../auctions/widgets/bid_room_entry_card.dart';
 import '../../listings/logic/listing_cubit.dart';
 import '../../listings/logic/listing_state.dart';
 import '../../profile/logic/profile_cubit.dart';
@@ -204,10 +208,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(
                                 child: TextField(
                                   controller: _searchController,
-                                  decoration: InputDecoration(
+                                  decoration: AppTheme.bareInput(
                                     hintText: 'Search title or category...',
                                     hintStyle: AppTextStyles.bodyMedium,
-                                    border: InputBorder.none,
                                     isDense: true,
                                   ),
                                 ),
@@ -354,7 +357,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (state is ListingError) {
-                  return Center(child: Text(state.message));
+                  return ErrorStateView(
+                    error: state.message,
+                    onRetry: () => context.read<ListingCubit>().fetchListings(),
+                  );
                 }
                 if (state is ListingLoaded) {
                   return _buildResultsList(
@@ -684,16 +690,24 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.all(16),
-            // One extra row for the pagination footer.
-            itemCount: filtered.length + (state.hasMore ? 1 : 0),
+            // The Bid Room door at the top, then the listings, then one
+            // extra row for the pagination footer.
+            itemCount: filtered.length + 1 + (state.hasMore ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index == filtered.length) return _buildLoadMoreFooter(state);
+              if (index == 0) {
+                return BidRoomEntry(onTap: () => context.push('/bid-room'));
+              }
+
+              final listingIndex = index - 1;
+              if (listingIndex == filtered.length) {
+                return _buildLoadMoreFooter(state);
+              }
 
               return FadeInSlide(
                 // Stagger only the first page; later pages arrive mid-scroll
                 // and a delay there just makes them feel laggy.
-                delay: Duration(milliseconds: (index % 20) * 60),
-                child: _buildItemCard(context, filtered[index]),
+                delay: Duration(milliseconds: (listingIndex % 20) * 60),
+                child: _buildItemCard(context, filtered[listingIndex]),
               );
             },
           ),
@@ -770,7 +784,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final condition = listing.condition;
 
     return CardLift(
-      onTap: () => context.push('/item-details', extra: listing),
+      // An auction has no fixed price to make a deal at, so its card opens
+      // the floor rather than the ordinary details screen.
+      onTap: () => listing.isAuction
+          ? context.push('/bid-room/${listing.auctionId}')
+          : context.push('/item-details', extra: listing),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
@@ -795,10 +813,51 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    ListingImage(
-                      url: listing.coverImageUrl,
+                    ListingGallery(
+                      imageUrls: listing.imageUrls,
                       placeholderIconSize: 50,
                     ),
+                    if (listing.isAuction)
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: RoomColors.ground,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: RoomColors.accent,
+                                offset: Offset(2, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.gavel_rounded,
+                                size: 12,
+                                color: RoomColors.accent,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'UP FOR BIDS',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.6,
+                                  color: RoomColors.accent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     // Price badge
                     Positioned(
                       bottom: 12,
@@ -813,7 +872,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          listing.formattedPrice,
+                          listing.isAuction
+                              ? 'From ${listing.formattedPrice}'
+                              : listing.formattedPrice,
                           style: AppTextStyles.bodyMediumDark.copyWith(
                             color: AppColors.white,
                             fontWeight: FontWeight.w900,

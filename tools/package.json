@@ -1,0 +1,14 @@
+{
+  "name": "studyswap-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed": "node seed.mjs",
+    "reseed": "node seed.mjs --wipe",
+    "clean": "node seed.mjs --clean",
+    "backfill-credits": "node backfill-credits.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2"
+  }
+}

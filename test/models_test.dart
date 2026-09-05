@@ -199,6 +199,40 @@ void main() {
       expect(user.title, 'Freshman Trader');
       expect(user.formattedRating, '0.0');
     });
+
+    test('reads the credit balance', () {
+      final user = AppUser.fromMap('u1', const {
+        'credits': 185,
+        'creditsLocked': 60,
+      });
+
+      expect(user.credits, 185);
+      expect(user.creditsLocked, 60);
+      expect(user.availableCredits, 125);
+      expect(user.maxBid, 1250);
+    });
+
+    test('an account from before credits existed reads as zero, not null', () {
+      // Every profile written before this feature is missing both fields.
+      final user = AppUser.fromMap('old', const {'fullName': 'Amina'});
+
+      expect(user.credits, 0);
+      expect(user.availableCredits, 0);
+      expect(user.maxBid, 0);
+    });
+
+    test(
+      'a balance behind its locked total shows nothing free, not a debt',
+      () {
+        final user = AppUser.fromMap('u3', const {
+          'credits': 10,
+          'creditsLocked': 40,
+        });
+
+        expect(user.availableCredits, 0);
+        expect(user.maxBid, 0);
+      },
+    );
   });
 
   group('ChatSummary', () {

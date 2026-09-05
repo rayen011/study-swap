@@ -1,0 +1,3 @@
+node_modules/
+# Grants full admin access to the Firebase project. Never commit.
+serviceAccountKey.json

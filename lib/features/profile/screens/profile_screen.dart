@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,8 @@ import '../data/user_repository.dart';
 import '../logic/profile_cubit.dart';
 import '../logic/profile_state.dart';
 import '../../../core/widgets/listing_image.dart';
+import '../../../core/widgets/credits_card.dart';
+import '../../listings/widgets/listing_owner_actions.dart';
 import '../../../core/widgets/user_title_badge.dart';
 
 /// ProfileScreen: Dynamic profile with listings grid, rating history, and stats.
@@ -161,6 +164,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                             soldListings.length,
                             user,
                           ),
+                          AppSizes.gapHMD,
+                          CreditsCard(user: user),
                           AppSizes.gapHLG,
                         ],
                       ),
@@ -521,22 +526,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       return const Center(child: CircularProgressIndicator());
     }
     if (listings.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isSold ? Icons.check_circle_outline : Icons.storefront_outlined,
-              size: 48,
-              color: AppColors.borderGrey,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isSold ? 'No sold items yet' : 'No active listings',
-              style: AppTextStyles.bodyMedium,
-            ),
-          ],
-        ),
+      return ProfileEmptyTab(
+        icon: isSold ? Icons.check_circle_outline : Icons.storefront_outlined,
+        message: isSold ? 'No sold items yet' : 'No active listings',
       );
     }
 
@@ -562,16 +554,20 @@ class _ProfileScreenState extends State<ProfileScreen>
       ListingStatus.active => Colors.green,
     };
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.solidBlack, width: 2),
-        boxShadow: const [
-          BoxShadow(color: AppColors.solidBlack, offset: Offset(3, 3)),
-        ],
-      ),
-      child: Column(
+    // The profile grid was the one place your own listings appeared and did
+    // nothing at all when tapped.
+    return GestureDetector(
+      onTap: () => showListingOwnerActions(context: context, listing: listing),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.solidBlack, width: 2),
+          boxShadow: const [
+            BoxShadow(color: AppColors.solidBlack, offset: Offset(3, 3)),
+          ],
+        ),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Image area
@@ -654,6 +650,7 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -665,19 +662,9 @@ class _ProfileScreenState extends State<ProfileScreen>
       return const Center(child: CircularProgressIndicator());
     }
     if (_reviews.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.star_outline,
-              size: 48,
-              color: AppColors.borderGrey,
-            ),
-            const SizedBox(height: 12),
-            Text('No reviews yet', style: AppTextStyles.bodyMedium),
-          ],
-        ),
+      return const ProfileEmptyTab(
+        icon: Icons.star_outline,
+        message: 'No reviews yet',
       );
     }
 
@@ -740,11 +727,55 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 }
 
+/// Empty state for a profile tab. Public so its layout can be regression-tested.
+///
+/// Scrollable on purpose. A plain `Center` overflows the moment its parent is
+/// shorter than the content, and inside a NestedScrollView body the available
+/// height isn't ours to predict — a real device handed this one 2 logical
+/// pixels. Constraining to at least the viewport keeps it centred when there
+/// is room, and lets it scroll when there isn't.
+class ProfileEmptyTab extends StatelessWidget {
+  const ProfileEmptyTab({super.key, required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: constraints.maxHeight.isFinite
+                  ? constraints.maxHeight
+                  : 0,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 48, color: AppColors.borderGrey),
+                const SizedBox(height: 12),
+                Text(message, style: AppTextStyles.bodyMedium),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // ── Pinned Tab Bar Delegate ───────────────────────────────────────────────────
 
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar tabBar;
   const _TabBarDelegate(this.tabBar);
+
+  /// The labels carry live counts — ACTIVE (3), REVIEWS (12) — so returning
+  /// false here froze them at whatever they were on the first build.
+  List<String> get _labels =>
+      tabBar.tabs.map((t) => t is Tab ? (t.text ?? '') : '').toList();
 
   @override
   double get minExtent => tabBar.preferredSize.height + 1;
@@ -769,5 +800,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_TabBarDelegate oldDelegate) => false;
+  bool shouldRebuild(_TabBarDelegate oldDelegate) =>
+      !listEquals(oldDelegate._labels, _labels) ||
+      oldDelegate.tabBar.controller != tabBar.controller;
 }

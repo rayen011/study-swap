@@ -2,24 +2,40 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../core/constants/auction_rules.dart';
 import '../../../core/constants/listing_options.dart';
+import '../../../core/models/auction.dart';
 import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/custom_button.dart';
+import '../../../core/widgets/listing_image.dart';
 import '../../listings/data/image_repository.dart';
 import '../../listings/logic/listing_cubit.dart';
 import '../../listings/logic/listing_state.dart';
 import '../../profile/logic/profile_cubit.dart';
 import '../../profile/logic/profile_state.dart';
+import '../widgets/sale_mode_picker.dart';
 
-/// SellScreen: The form for creating a new listing.
+/// The form for posting a listing, and for editing one already posted.
+///
+/// One form rather than two. An edit screen that duplicated this would drift
+/// from it — different validators, a category the sell form can write and the
+/// edit form can't — and the bug that would surface is a listing you can post
+/// but never correct.
 class SellScreen extends StatefulWidget {
-  const SellScreen({super.key});
+  const SellScreen({super.key, this.existing});
+
+  /// The listing being edited, or null when posting a new one.
+  final Listing? existing;
+
+  bool get isEditing => existing != null;
 
   @override
   State<SellScreen> createState() => _SellScreenState();
@@ -30,24 +46,54 @@ class _SellScreenState extends State<SellScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+  final TextEditingController _reserveController = TextEditingController();
   ListingCategory _selectedCategory = ListingCategory.textbooks;
   ListingCondition _selectedCondition = ListingCondition.likeNew;
+
+  SaleMode _saleMode = SaleMode.fixed;
+  int _durationHours = AuctionRules.durations[1].hours;
+  bool _hasReserve = false;
 
   /// Photos chosen but not yet uploaded. They upload when the listing is
   /// posted, so abandoning the form costs nothing in Storage.
   final List<XFile> _images = [];
+
+  /// Photos already in Cloud Storage, when editing. Removing one here drops
+  /// it from the listing; the file itself is cleaned up with the listing.
+  final List<String> _keptImageUrls = [];
+
   bool _picking = false;
+
+  /// How many photos the listing would end up with.
+  int get _photoCount => _keptImageUrls.length + _images.length;
 
   @override
   void initState() {
     super.initState();
-    _loadDraft();
+    // A saved draft belongs to a new listing. Restoring it over the thing
+    // somebody is editing would quietly replace their listing with a draft
+    // they abandoned last week.
+    if (widget.isEditing) {
+      _prefillFrom(widget.existing!);
+    } else {
+      _loadDraft();
+    }
+  }
+
+  void _prefillFrom(Listing listing) {
+    _titleController.text = listing.title;
+    _descController.text = listing.description;
+    _priceController.text = listing.price.toStringAsFixed(2);
+    _selectedCategory = listing.category ?? ListingCategory.other;
+    _selectedCondition = listing.condition ?? ListingCondition.good;
+    _keptImageUrls.addAll(listing.imageUrls);
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _priceController.dispose();
+    _reserveController.dispose();
     _descController.dispose();
     super.dispose();
   }
@@ -165,18 +211,72 @@ class _SellScreenState extends State<SellScreen> {
         ? profileState.user.university
         : 'none';
 
+    // Validated above, so the parse can't fail here.
+    final price = double.parse(_priceController.text.trim());
+
+    if (widget.isEditing) {
+      context.read<ListingCubit>().editListing(
+        widget.existing!.id,
+        ListingDraft(
+          title: _titleController.text.trim(),
+          description: _descController.text.trim(),
+          price: price,
+          category: _selectedCategory,
+          condition: _selectedCondition,
+          university: widget.existing!.university,
+          imageUrls: List.of(_keptImageUrls),
+        ),
+        newImages: List.of(_images),
+      );
+      return;
+    }
+
     context.read<ListingCubit>().createListing(
       ListingDraft(
         title: _titleController.text.trim(),
         description: _descController.text.trim(),
-        // Validated above, so the parse can't fail here.
-        price: double.parse(_priceController.text.trim()),
+        price: price,
         category: _selectedCategory,
         condition: _selectedCondition,
         university: uni,
       ),
       images: List.of(_images),
+      auction: _saleMode.isAuction
+          ? AuctionSetup(
+              // Bids are whole pounds, so an opening price of £12.50 would
+              // make the first legal bid £13 and the stated price a lie.
+              startPrice: price.ceil(),
+              durationHours: _durationHours,
+              reservePrice: _reserve,
+            )
+          : null,
     );
+  }
+
+  /// The reserve as a whole number, or null when there isn't one.
+  int? get _reserve {
+    if (!_saleMode.isAuction || !_hasReserve) return null;
+    return int.tryParse(_reserveController.text.trim());
+  }
+
+  /// Validated here as well as on the server, because a seller finding out
+  /// their reserve was impossible *after* the photos uploaded is a bad way to
+  /// learn it.
+  String? _validateReserve(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Enter a reserve, or turn it off';
+
+    final reserve = int.tryParse(text);
+    if (reserve == null) return 'Whole pounds only';
+    if (reserve > AuctionRules.maxStartPrice) {
+      return 'Nobody could bid that high — £${AuctionRules.maxStartPrice} is the ceiling';
+    }
+
+    final opening = double.tryParse(_priceController.text.trim());
+    if (opening != null && reserve < opening.ceil()) {
+      return 'A reserve under the opening price would never stop anything';
+    }
+    return null;
   }
 
   Future<void> _clearDraft() async {
@@ -194,11 +294,21 @@ class _SellScreenState extends State<SellScreen> {
       listener: (context, state) {
         if (state is ListingOperationSuccess) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Listing posted successfully!'),
+            SnackBar(
+              content: Text(
+                widget.isEditing ? 'Changes saved' : 'Listing posted!',
+              ),
               backgroundColor: AppColors.limeGreen,
             ),
           );
+
+          // An edit is finished when it's saved. Leaving somebody on a form
+          // with nothing left to do is how you get a second accidental save.
+          if (widget.isEditing) {
+            if (context.canPop()) context.pop();
+            return;
+          }
+
           // Clear form and draft
           _titleController.clear();
           _priceController.clear();
@@ -258,10 +368,18 @@ class _SellScreenState extends State<SellScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('WHAT ARE YOU\nSELLING?', style: AppTextStyles.heading1),
+                Text(
+                  widget.isEditing
+                      ? 'EDIT YOUR\nLISTING'
+                      : 'WHAT ARE YOU\nSELLING?',
+                  style: AppTextStyles.heading1,
+                ),
                 AppSizes.gapHSm,
                 Text(
-                  'Provide details about your item to help other students find it easily on campus.',
+                  widget.isEditing
+                      ? 'Anything here can change while nobody has bid on it.'
+                      : 'Provide details about your item to help other '
+                            'students find it easily on campus.',
                   style: AppTextStyles.bodyMediumDark,
                 ),
 
@@ -301,8 +419,26 @@ class _SellScreenState extends State<SellScreen> {
 
                 AppSizes.gapHLG,
 
-                // Price
-                _buildLabel('PRICE *'),
+                // How it's being sold. Above the price on purpose: it
+                // changes what the price field means.
+                //
+                // Not offered when editing: moving a posted listing into the
+                // room opens a floor with a closing time and a reserve, which
+                // is a different act from correcting a typo.
+                if (!widget.isEditing) ...[
+                  _buildLabel('HOW ARE YOU SELLING IT?'),
+                  AppSizes.gapHSm,
+                  SaleModePicker(
+                    mode: _saleMode,
+                    onChanged: (mode) => setState(() => _saleMode = mode),
+                  ),
+
+                  AppSizes.gapHLG,
+                ],
+
+                _buildLabel(
+                  _saleMode.isAuction ? 'OPENING PRICE *' : 'PRICE *',
+                ),
                 AppSizes.gapHSm,
                 Container(
                   decoration: BoxDecoration(
@@ -326,18 +462,59 @@ class _SellScreenState extends State<SellScreen> {
                           ),
                           validator: Validators.price,
                           autovalidateMode: AutovalidateMode.onUserInteraction,
-                          decoration: const InputDecoration(
+                          decoration: AppTheme.bareInput(
                             hintText: '0.00',
-                            border: InputBorder.none,
-                            errorStyle: TextStyle(height: 0, fontSize: 0),
-                            errorBorder: InputBorder.none,
-                            focusedErrorBorder: InputBorder.none,
+                            hideErrorText: true,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
+
+                if (_saleMode.isAuction) ...[
+                  AppSizes.gapHSm,
+                  Text(
+                    'Open low. Something nobody bids on tells you nothing; '
+                    'something six people fight over tells you what it is '
+                    'worth.',
+                    style: AppTextStyles.bodySmall.copyWith(height: 1.45),
+                  ),
+
+                  AppSizes.gapHLG,
+
+                  _buildLabel('HOW LONG'),
+                  AppSizes.gapHSm,
+                  DurationPicker(
+                    hours: _durationHours,
+                    onChanged: (hours) =>
+                        setState(() => _durationHours = hours),
+                  ),
+
+                  AppSizes.gapHLG,
+
+                  Row(
+                    children: [
+                      Expanded(child: _buildLabel('SET A RESERVE')),
+                      Switch(
+                        value: _hasReserve,
+                        activeThumbColor: AppColors.white,
+                        activeTrackColor: AppColors.primaryBlue,
+                        onChanged: (on) => setState(() => _hasReserve = on),
+                      ),
+                    ],
+                  ),
+                  if (_hasReserve) ...[
+                    AppSizes.gapHSm,
+                    _buildInputBox(
+                      'Minimum you would accept',
+                      _reserveController,
+                      validator: _validateReserve,
+                    ),
+                  ],
+                  AppSizes.gapHSm,
+                  ReserveNote(reserve: _hasReserve ? _reserve : null),
+                ],
 
                 AppSizes.gapHLG,
 
@@ -401,10 +578,9 @@ class _SellScreenState extends State<SellScreen> {
                     maxLength: Validators.maxDescriptionLength,
                     style: AppTextStyles.bodyMedium,
                     validator: Validators.description,
-                    decoration: const InputDecoration(
+                    decoration: AppTheme.bareInput(
                       hintText:
                           'Describe the item, note any highlighting or wear...',
-                      border: InputBorder.none,
                       counterText: '',
                     ),
                   ),
@@ -505,12 +681,14 @@ class _SellScreenState extends State<SellScreen> {
                 AppSizes.gapHXL,
 
                 // Action Buttons
-                CustomButton(
-                  text: 'SAVE DRAFT',
-                  type: ButtonType.outline,
-                  onPressed: _saveDraft,
-                ),
-                AppSizes.gapHMD,
+                if (!widget.isEditing) ...[
+                  CustomButton(
+                    text: 'SAVE DRAFT',
+                    type: ButtonType.outline,
+                    onPressed: _saveDraft,
+                  ),
+                  AppSizes.gapHMD,
+                ],
                 BlocBuilder<ListingCubit, ListingState>(
                   builder: (context, state) {
                     final busy =
@@ -519,8 +697,8 @@ class _SellScreenState extends State<SellScreen> {
                     final label = state is ListingUploading
                         ? 'UPLOADING ${(state.progress * 100).round()}%'
                         : busy
-                        ? 'POSTING...'
-                        : 'POST LISTING';
+                        ? (widget.isEditing ? 'SAVING...' : 'POSTING...')
+                        : (widget.isEditing ? 'SAVE CHANGES' : 'POST LISTING');
 
                     return CustomButton(
                       text: label,
@@ -551,17 +729,21 @@ class _SellScreenState extends State<SellScreen> {
   /// The photo strip: a tile per chosen image plus an add button, capped at
   /// [ImageRepository.maxImages].
   Widget _buildPhotoPicker() {
-    final canAddMore = _images.length < ImageRepository.maxImages;
+    final canAddMore = _photoCount < ImageRepository.maxImages;
 
     return SizedBox(
       height: 96,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _images.length + (canAddMore ? 1 : 0),
+        itemCount: _photoCount + (canAddMore ? 1 : 0),
         separatorBuilder: (_, _) => AppSizes.gapWSm,
         itemBuilder: (context, index) {
-          if (index == _images.length) return _buildAddPhotoTile();
-          return _buildPhotoTile(index);
+          if (index < _keptImageUrls.length) {
+            return _buildKeptPhotoTile(index);
+          }
+          final picked = index - _keptImageUrls.length;
+          if (picked == _images.length) return _buildAddPhotoTile();
+          return _buildPhotoTile(picked);
         },
       ),
     );
@@ -609,7 +791,34 @@ class _SellScreenState extends State<SellScreen> {
     );
   }
 
+  /// A photo already uploaded. Same chrome as a freshly picked one, so the
+  /// strip reads as one row rather than two kinds of thing.
+  Widget _buildKeptPhotoTile(int index) {
+    return _photoFrame(
+      isCover: index == 0,
+      onRemove: () => setState(() => _keptImageUrls.removeAt(index)),
+      child: ListingImage(url: _keptImageUrls[index]),
+    );
+  }
+
   Widget _buildPhotoTile(int index) {
+    return _photoFrame(
+      isCover: _keptImageUrls.isEmpty && index == 0,
+      onRemove: () => setState(() => _images.removeAt(index)),
+      child: Image.file(
+        File(_images[index].path),
+        fit: BoxFit.cover,
+        width: 96,
+        height: 96,
+      ),
+    );
+  }
+
+  Widget _photoFrame({
+    required bool isCover,
+    required VoidCallback onRemove,
+    required Widget child,
+  }) {
     return Stack(
       children: [
         Container(
@@ -621,16 +830,11 @@ class _SellScreenState extends State<SellScreen> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: Image.file(
-              File(_images[index].path),
-              fit: BoxFit.cover,
-              width: 96,
-              height: 96,
-            ),
+            child: child,
           ),
         ),
         // The first photo is what every card in the app shows.
-        if (index == 0)
+        if (isCover)
           Positioned(
             bottom: 4,
             left: 4,
@@ -651,7 +855,7 @@ class _SellScreenState extends State<SellScreen> {
           top: 2,
           right: 2,
           child: GestureDetector(
-            onTap: () => setState(() => _images.removeAt(index)),
+            onTap: onRemove,
             child: Container(
               padding: const EdgeInsets.all(3),
               decoration: const BoxDecoration(
@@ -701,13 +905,10 @@ class _SellScreenState extends State<SellScreen> {
             validator: validator,
             textInputAction: textInputAction,
             autovalidateMode: AutovalidateMode.onUserInteraction,
-            decoration: InputDecoration(
+            decoration: AppTheme.bareInput(
               hintText: hint,
-              border: InputBorder.none,
               hintStyle: AppTextStyles.bodyMedium,
-              errorStyle: const TextStyle(height: 0, fontSize: 0),
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
+              hideErrorText: true,
             ),
           ),
         ),

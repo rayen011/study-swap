@@ -6,6 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:studyswap/core/constants/listing_options.dart';
 import 'package:studyswap/core/models/listing.dart';
 import 'package:studyswap/core/models/listing_filter.dart';
+import 'package:studyswap/features/auctions/data/auction_repository.dart';
 import 'package:studyswap/features/listings/data/image_repository.dart';
 import 'package:studyswap/features/listings/data/listing_repository.dart';
 import 'package:studyswap/features/listings/logic/listing_cubit.dart';
@@ -14,6 +15,8 @@ import 'package:studyswap/features/listings/logic/listing_state.dart';
 class _MockListingRepository extends Mock implements ListingRepository {}
 
 class _MockImageRepository extends Mock implements ImageRepository {}
+
+class _MockAuctionRepository extends Mock implements AuctionRepository {}
 
 Listing _listing(String id) => Listing.fromMap(id, {
   'title': 'Item $id',
@@ -28,6 +31,7 @@ List<Listing> _page(int count, {int from = 0}) =>
 void main() {
   late _MockListingRepository listings;
   late _MockImageRepository images;
+  late _MockAuctionRepository auctions;
 
   setUpAll(() {
     registerFallbackValue(const ListingFilter());
@@ -46,9 +50,10 @@ void main() {
   setUp(() {
     listings = _MockListingRepository();
     images = _MockImageRepository();
+    auctions = _MockAuctionRepository();
   });
 
-  ListingCubit build() => ListingCubit(listings, images);
+  ListingCubit build() => ListingCubit(listings, images, auctions);
 
   /// Each call gets its own stream: `Stream.value` is single-subscription, so
   /// handing the same instance to two subscribes would throw on the second.

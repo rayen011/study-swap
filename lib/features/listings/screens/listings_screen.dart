@@ -6,8 +6,10 @@ import '../../../core/models/listing.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_sizes.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/listing_image.dart';
+import '../../../core/widgets/listing_gallery.dart';
+import '../../../core/widgets/error_state_view.dart';
 import '../logic/my_listings_cubit.dart';
+import '../widgets/listing_owner_actions.dart';
 import '../logic/listing_state.dart';
 import '../../favorites/logic/favorites_cubit.dart';
 import '../../../core/animations/app_animations.dart';
@@ -116,7 +118,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (state is ListingError) {
-          return Center(child: Text(state.message));
+          return ErrorStateView(
+            error: state.message,
+            onRetry: () => context.read<MyListingsCubit>().fetchUserListings(),
+          );
         }
         if (state is ListingLoaded) {
           final listings = state.listings.where((l) {
@@ -180,7 +185,10 @@ class _ListingsScreenState extends State<ListingsScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         if (state is FavoritesError) {
-          return Center(child: Text(state.message));
+          return ErrorStateView(
+            error: state.message,
+            onRetry: () => context.read<FavoritesCubit>().fetchFavorites(),
+          );
         }
         if (state is FavoritesLoaded) {
           if (state.favorites.isEmpty) {
@@ -258,8 +266,8 @@ class _ListingsScreenState extends State<ListingsScreen> {
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(12),
                     ),
-                    child: ListingImage(
-                      url: listing.coverImageUrl,
+                    child: ListingGallery(
+                      imageUrls: listing.imageUrls,
                       placeholderIconSize: 64,
                       placeholderColor: color,
                     ),
@@ -373,44 +381,22 @@ class _ListingsScreenState extends State<ListingsScreen> {
                       ],
                     ),
                   ),
+                  // One entry point for everything a seller can do with it,
+                  // rather than a delete button and no way to fix a typo.
                   if (showDelete)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _showDeleteDialog(listing),
+                      icon: const Icon(Icons.more_horiz),
+                      tooltip: 'Manage listing',
+                      onPressed: () => showListingOwnerActions(
+                        context: context,
+                        listing: listing,
+                      ),
                     ),
                 ],
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showDeleteDialog(Listing listing) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Listing?'),
-        content: Text(
-          listing.hasImages
-              ? 'This removes the listing and its ${listing.imageUrls.length} '
-                    'photo${listing.imageUrls.length == 1 ? '' : 's'}.'
-              : 'Are you sure you want to remove this listing?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<MyListingsCubit>().deleteListing(listing.id);
-              Navigator.pop(ctx);
-            },
-            child: const Text('DELETE', style: TextStyle(color: Colors.red)),
-          ),
-        ],
       ),
     );
   }

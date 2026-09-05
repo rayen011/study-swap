@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
+import '../constants/credit_rules.dart';
 import 'firestore_parsing.dart';
 
 /// A StudySwap member.
@@ -19,6 +20,8 @@ class AppUser extends Equatable {
     required this.ratingCount,
     required this.dealCount,
     required this.title,
+    required this.credits,
+    required this.creditsLocked,
     required this.isSuspended,
     required this.createdAt,
   });
@@ -37,6 +40,13 @@ class AppUser extends Equatable {
   /// `RatingRepository.getTitleForDeals`.
   final String title;
 
+  /// Bidding power earned from completed trades. Written only by Cloud
+  /// Functions — see `functions/src/credits.ts` and [CreditRules].
+  final int credits;
+
+  /// The part of [credits] staked on bids that are still standing.
+  final int creditsLocked;
+
   final bool isSuspended;
   final DateTime? createdAt;
 
@@ -50,6 +60,8 @@ class AppUser extends Equatable {
       ratingCount: asInt(data['ratingCount']),
       dealCount: asInt(data['dealCount']),
       title: asString(data['title'], fallback: 'Freshman Trader'),
+      credits: asInt(data['credits']),
+      creditsLocked: asInt(data['creditsLocked']),
       isSuspended: asBool(data['isSuspended']),
       createdAt: asDate(data['createdAt']),
     );
@@ -71,6 +83,8 @@ class AppUser extends Equatable {
     ratingCount: 0,
     dealCount: 0,
     title: 'Freshman Trader',
+    credits: 0,
+    creditsLocked: 0,
     isSuspended: false,
     createdAt: null,
   );
@@ -79,6 +93,16 @@ class AppUser extends Equatable {
   String get formattedRating => rating.toStringAsFixed(1);
 
   bool get hasUniversity => university.isNotEmpty && university != 'none';
+
+  /// Credits free to stake on a new bid.
+  ///
+  /// Clamped at zero: a balance behind its locked total would only ever be a
+  /// bug, and the profile should show 0 rather than a negative.
+  int get availableCredits =>
+      credits - creditsLocked < 0 ? 0 : credits - creditsLocked;
+
+  /// The largest bid this member could place right now.
+  int get maxBid => CreditRules.maxBidFor(availableCredits);
 
   @override
   List<Object?> get props => [
@@ -90,6 +114,8 @@ class AppUser extends Equatable {
     ratingCount,
     dealCount,
     title,
+    credits,
+    creditsLocked,
     isSuspended,
     createdAt,
   ];

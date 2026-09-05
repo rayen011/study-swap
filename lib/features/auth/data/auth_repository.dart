@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/constants/credit_rules.dart';
+
 /// AuthRepository: owns the session.
 ///
 /// Firebase Auth is the single source of truth for whether somebody is signed
@@ -113,6 +115,10 @@ class AuthRepository {
         'ratingCount': 0,
         'dealCount': 0,
         'title': 'Freshman Trader',
+        // Pinned to this exact value by `firestore.rules`; every later change
+        // comes from a Cloud Function.
+        'credits': CreditRules.startingBalance,
+        'creditsLocked': 0,
         // Descriptive only — authorization comes from the auth claim read by
         // [isModerator]. The rules pin this field to 'user' for every client.
         'role': 'user',

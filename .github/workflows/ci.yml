@@ -44,13 +44,17 @@ jobs:
           if-no-files-found: ignore
 
   functions:
-    name: Typecheck functions
+    name: Functions
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: functions
     steps:
       - uses: actions/checkout@v4
+
+      # The Firestore emulator needs a JDK; 21 is the minimum firebase-tools
+      # accepts.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
 
       - uses: actions/setup-node@v4
         with:
@@ -59,4 +63,42 @@ jobs:
           cache-dependency-path: functions/package-lock.json
 
       - run: npm ci
+        working-directory: functions
+
       - run: npm run build
+        working-directory: functions
+
+      # `build` compiles src only; this covers the tests too.
+      - run: npm run typecheck
+        working-directory: functions
+
+      # The auction closer moves credits inside a transaction, so it is tested
+      # against a real emulator rather than a mocked Firestore.
+      - name: Run function tests against the emulator
+        run: npm --prefix functions run test:emulate
+
+  rules:
+    name: Security rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The Firestore and Storage emulators need a JDK; 21 is the minimum
+      # firebase-tools accepts.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: rules-tests/package-lock.json
+
+      - run: npm ci
+        working-directory: rules-tests
+
+      - name: Run rules tests against the emulator
+        run: |
+          npx --yes firebase-tools emulators:exec             --only firestore,storage             --project studyswap-rules-test             "npm --prefix rules-tests test"

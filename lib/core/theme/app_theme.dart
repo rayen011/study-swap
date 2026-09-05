@@ -184,4 +184,41 @@ class AppTheme {
       borderSide: BorderSide(color: color, width: width),
     );
   }
+
+  /// Decoration for a field that draws its own container.
+  ///
+  /// Several fields — the search bar, the message composer, the sell form —
+  /// sit inside a hand-drawn bordered `Container` and want no chrome of their
+  /// own. Setting `border: InputBorder.none` is not enough: `enabledBorder`
+  /// and `focusedBorder` take precedence over `border`, so the theme's
+  /// rounded outline gets painted *inside* the container, giving a box in a
+  /// box. Every border slot has to be cleared explicitly, and the fill turned
+  /// off.
+  ///
+  /// [hideErrorText] suppresses the inline message for fields that render
+  /// their validation error below the container instead.
+  static InputDecoration bareInput({
+    String? hintText,
+    TextStyle? hintStyle,
+    bool isDense = false,
+    bool hideErrorText = false,
+    String? counterText,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      hintStyle: hintStyle,
+      isDense: isDense,
+      counterText: counterText,
+      filled: false,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+      errorStyle: hideErrorText
+          ? const TextStyle(height: 0, fontSize: 0)
+          : null,
+    );
+  }
 }

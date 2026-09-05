@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auctions/data/auction_repository.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/logic/auth_cubit.dart';
 import 'features/listings/data/image_repository.dart';
@@ -34,6 +35,7 @@ void main() async {
   final favoritesRepository = FavoritesRepository();
   final ratingRepository = RatingRepository();
   final reportRepository = ReportRepository();
+  final auctionRepository = AuctionRepository();
 
   runApp(
     MyApp(
@@ -45,6 +47,7 @@ void main() async {
       favoritesRepository: favoritesRepository,
       ratingRepository: ratingRepository,
       reportRepository: reportRepository,
+      auctionRepository: auctionRepository,
     ),
   );
 }
@@ -58,6 +61,7 @@ class MyApp extends StatefulWidget {
   final FavoritesRepository favoritesRepository;
   final RatingRepository ratingRepository;
   final ReportRepository reportRepository;
+  final AuctionRepository auctionRepository;
 
   const MyApp({
     super.key,
@@ -69,6 +73,7 @@ class MyApp extends StatefulWidget {
     required this.favoritesRepository,
     required this.ratingRepository,
     required this.reportRepository,
+    required this.auctionRepository,
   });
 
   @override
@@ -105,6 +110,7 @@ class _MyAppState extends State<MyApp> {
         RepositoryProvider.value(value: widget.favoritesRepository),
         RepositoryProvider.value(value: widget.ratingRepository),
         RepositoryProvider.value(value: widget.reportRepository),
+        RepositoryProvider.value(value: widget.auctionRepository),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -113,6 +119,7 @@ class _MyAppState extends State<MyApp> {
             create: (context) => ListingCubit(
               widget.listingRepository,
               widget.imageRepository,
+              widget.auctionRepository,
             ),
           ),
           BlocProvider(

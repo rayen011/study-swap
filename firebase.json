@@ -14,7 +14,10 @@
         "node_modules",
         ".git",
         "firebase-debug.log",
-        "*.local"
+        "*.local",
+        "test",
+        "vitest.config.mts",
+        "tsconfig.test.json"
       ],
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run build"
@@ -43,5 +46,23 @@
         }
       }
     }
+  },
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "storage": {
+      "port": 9199
+    },
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": true
+    },
+    "singleProjectMode": true
   }
 }

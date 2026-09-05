@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/constants/credit_rules.dart';
 import '../../../core/models/app_user.dart';
 
 /// UserRepository: reads and writes member profiles.
@@ -27,6 +28,52 @@ class UserRepository {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Future.value(null);
     return getUser(uid);
+  }
+
+  /// Returns the signed-in user's profile, creating it if it has gone missing.
+  ///
+  /// Signup writes the Auth account and the profile document separately, so a
+  /// crash or a dropped connection between them leaves an account that can
+  /// sign in but has no profile — and every screen that reads it dead-ends
+  /// with no way out through the UI. Deleting the collection by hand produces
+  /// the same state.
+  ///
+  /// The shape here has to match what `firestore.rules` accepts on create:
+  /// reputation starts at zero, credits at the fixed opening balance, and the
+  /// role is always `user`.
+  Future<AppUser?> ensureProfile() async {
+    final authUser = _auth.currentUser;
+    if (authUser == null) return null;
+
+    final existing = await getUser(authUser.uid);
+    if (existing != null) return existing;
+
+    final rebuilt = {
+      'fullName': authUser.displayName?.trim().isNotEmpty == true
+          ? authUser.displayName!.trim()
+          : _nameFromEmail(authUser.email),
+      'email': authUser.email ?? '',
+      'university': 'none',
+      'rating': 0.0,
+      'ratingCount': 0,
+      'dealCount': 0,
+      'title': 'Freshman Trader',
+      'credits': CreditRules.startingBalance,
+      'creditsLocked': 0,
+      'role': 'user',
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+
+    await _users.doc(authUser.uid).set(rebuilt);
+    return getUser(authUser.uid);
+  }
+
+  /// A readable fallback name when Auth has no display name — better than
+  /// showing the raw email or a blank profile.
+  static String _nameFromEmail(String? email) {
+    final local = (email ?? '').split('@').first.trim();
+    if (local.isEmpty) return 'Student';
+    return local[0].toUpperCase() + local.substring(1);
   }
 
   /// Streams a member's profile, for screens that should reflect live changes.

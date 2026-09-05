@@ -7,6 +7,8 @@ import '../../features/auth/screens/signup_screen.dart';
 import '../../features/main/screens/main_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/home/screens/item_details_screen.dart';
+import '../../features/auctions/screens/auction_details_screen.dart';
+import '../../features/auctions/screens/bid_room_screen.dart';
 import '../../features/listings/screens/listings_screen.dart';
 import '../../features/sell/screens/sell_screen.dart';
 import '../../features/chat/screens/chat_screen.dart';
@@ -107,6 +109,41 @@ class AppRouter {
               transitionType: 'scale',
             );
           },
+        ),
+        // The Bid Room lives on the root navigator on purpose: a route inside
+        // the shell keeps the bottom bar, and the bar is what makes it feel
+        // like a sixth tab instead of somewhere you went.
+        GoRoute(
+          path: '/bid-room',
+          parentNavigatorKey: _rootNavigatorKey,
+          pageBuilder: (context, state) => _buildTransitionPage(
+            child: const BidRoomScreen(),
+            state: state,
+            transitionType: 'slideUp',
+          ),
+          routes: [
+            GoRoute(
+              path: ':auctionId',
+              parentNavigatorKey: _rootNavigatorKey,
+              pageBuilder: (context, state) => _buildTransitionPage(
+                child: AuctionDetailsScreen(
+                  auctionId: state.pathParameters['auctionId']!,
+                ),
+                state: state,
+              ),
+            ),
+          ],
+        ),
+        // Editing reuses the sell form rather than a second screen that would
+        // drift from it.
+        GoRoute(
+          path: '/edit-listing',
+          parentNavigatorKey: _rootNavigatorKey,
+          pageBuilder: (context, state) => _buildTransitionPage(
+            child: SellScreen(existing: state.extra as Listing),
+            state: state,
+            transitionType: 'slideUp',
+          ),
         ),
         GoRoute(
           path: '/edit-profile',
