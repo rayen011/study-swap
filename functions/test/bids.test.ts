@@ -280,7 +280,11 @@ describe("bad input", () => {
   });
 });
 
-describe("two bids at once", () => {
+// Deliberately contended, so Firestore retries the loser's transaction —
+// which is exactly what is being tested, and is also slow. The default 5s
+// budget is enough on a quiet machine and not on a busy one, and a race test
+// that fails intermittently teaches people to re-run rather than to look.
+describe("two bids at once", { timeout: 30_000 }, () => {
   test("only one of them can win", async () => {
     // The case that would actually bite: two people bidding the same amount
     // in the same instant must not both become the high bidder, and must not

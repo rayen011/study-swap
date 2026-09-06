@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
@@ -8,7 +10,9 @@ import 'core/theme/app_theme.dart';
 import 'features/auctions/data/auction_repository.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/logic/auth_cubit.dart';
+import 'features/auth/logic/auth_state.dart';
 import 'features/listings/data/image_repository.dart';
+import 'features/notifications/data/notifications_repository.dart';
 import 'features/listings/data/listing_repository.dart';
 import 'features/listings/logic/listing_cubit.dart';
 import 'features/listings/logic/my_listings_cubit.dart';
@@ -36,6 +40,7 @@ void main() async {
   final ratingRepository = RatingRepository();
   final reportRepository = ReportRepository();
   final auctionRepository = AuctionRepository();
+  final notificationsRepository = NotificationsRepository();
 
   runApp(
     MyApp(
@@ -48,6 +53,7 @@ void main() async {
       ratingRepository: ratingRepository,
       reportRepository: reportRepository,
       auctionRepository: auctionRepository,
+      notificationsRepository: notificationsRepository,
     ),
   );
 }
@@ -62,6 +68,7 @@ class MyApp extends StatefulWidget {
   final RatingRepository ratingRepository;
   final ReportRepository reportRepository;
   final AuctionRepository auctionRepository;
+  final NotificationsRepository notificationsRepository;
 
   const MyApp({
     super.key,
@@ -74,6 +81,7 @@ class MyApp extends StatefulWidget {
     required this.ratingRepository,
     required this.reportRepository,
     required this.auctionRepository,
+    required this.notificationsRepository,
   });
 
   @override
@@ -83,6 +91,8 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   late final AuthCubit _authCubit;
   late final GoRouter _router;
+  StreamSubscription<AuthState>? _sessionSubscription;
+  StreamSubscription<NotificationTap>? _tapSubscription;
 
   @override
   void initState() {
@@ -90,10 +100,43 @@ class _MyAppState extends State<MyApp> {
     _authCubit = AuthCubit(widget.authRepository);
     _authCubit.start();
     _router = AppRouter.createRouter(_authCubit);
+    _watchSession();
+  }
+
+  /// Registers for push on sign-in and releases the token on sign-out.
+  ///
+  /// Driven by the auth stream rather than called from a screen: whichever
+  /// screen happened to own it would be the screen you have to visit before
+  /// notifications start working.
+  void _watchSession() {
+    var registered = false;
+
+    _sessionSubscription = _authCubit.stream.listen((state) {
+      final signedIn = state is Authenticated;
+
+      if (signedIn && !registered) {
+        registered = true;
+        widget.notificationsRepository.start();
+      } else if (!signedIn && registered) {
+        registered = false;
+        widget.notificationsRepository.stop();
+      }
+    });
+
+    // A notification that launched the app from cold.
+    widget.notificationsRepository.initialTap().then(_follow);
+    _tapSubscription = widget.notificationsRepository.onTap.listen(_follow);
+  }
+
+  void _follow(NotificationTap? tap) {
+    final route = tap?.route;
+    if (route != null) _router.push(route);
   }
 
   @override
   void dispose() {
+    _sessionSubscription?.cancel();
+    _tapSubscription?.cancel();
     _authCubit.close();
     super.dispose();
   }
@@ -111,6 +154,7 @@ class _MyAppState extends State<MyApp> {
         RepositoryProvider.value(value: widget.ratingRepository),
         RepositoryProvider.value(value: widget.reportRepository),
         RepositoryProvider.value(value: widget.auctionRepository),
+        RepositoryProvider.value(value: widget.notificationsRepository),
       ],
       child: MultiBlocProvider(
         providers: [

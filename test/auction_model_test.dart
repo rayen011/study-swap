@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:studyswap/core/models/auction.dart';
+import 'package:studyswap/core/models/message.dart';
 
 void main() {
   final now = DateTime(2026, 9, 3, 12);
@@ -162,6 +163,47 @@ void main() {
       final bid = Bid.fromMap('b1', const {'bidderId': 'ben'});
 
       expect(bid.bidderName, 'Student');
+    });
+  });
+
+  group('a deal that came out of an auction', () {
+    test('remembers which one', () {
+      // Settlement finds the auction back from the deal, so the link has to
+      // survive the round trip.
+      final deal = DealRequest.fromMap(const {
+        'itemId': 'listing-1',
+        'title': 'Signed rugby ball',
+        'price': 96,
+        'status': 'accepted',
+        'buyerId': 'ben',
+        'sellerId': 'amina',
+        'auctionId': 'a1',
+      });
+
+      expect(deal.auctionId, 'a1');
+      expect(deal.isFromAuction, isTrue);
+    });
+
+    test('an ordinary deal has no auction on it', () {
+      final deal = DealRequest.fromMap(const {
+        'title': 'Campbell Biology',
+        'price': 24.5,
+        'buyerId': 'ben',
+        'sellerId': 'amina',
+      });
+
+      expect(deal.auctionId, isNull);
+      expect(deal.isFromAuction, isFalse);
+    });
+
+    test('arrives already accepted', () {
+      // The bid was the agreement.
+      final deal = DealRequest.fromMap(const {
+        'status': 'accepted',
+        'auctionId': 'a1',
+      });
+
+      expect(deal.status, DealStatus.accepted);
     });
   });
 }

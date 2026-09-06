@@ -25,6 +25,17 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 
 import { CREDITS } from "./credits";
+import {
+  chatIdFor,
+  findAbandonedAuctions,
+  forfeitAbandonedAuction,
+  writeHandoff,
+} from "./handoff";
+import {
+  notifyAuctionClosed,
+  notifyRunnerUp,
+  notifyWon,
+} from "./notify";
 
 /** Same region as everything else, so they share a cold-start pool. */
 const region = "europe-west2";
@@ -126,6 +137,8 @@ export interface SettleResult {
   winnerId?: string;
   winningBid?: number;
   stakesReleased?: number;
+  /** The chat the handoff landed in, on a sale. */
+  chatId?: string | null;
 }
 
 /**
@@ -141,8 +154,9 @@ export interface SettleResult {
  * run finds the auction already closed and does nothing, which matters because
  * a scheduled function is retried on failure and may overlap with itself.
  *
- * What it deliberately does *not* do: create the chat and the deal card for
- * the winner. That is the handoff, and it belongs with settlement.
+ * A sale also writes the handoff — the chat and the accepted deal card — in
+ * the same transaction. Splitting them would allow a winner who has been told
+ * they won and has nowhere to go.
  */
 export async function settleAuction(
   auctionId: string,
@@ -199,6 +213,14 @@ export async function settleAuction(
       ? await tx.getAll(...bidderRefs)
       : [];
 
+    // The chat may already exist — these two may have traded before — and
+    // every read has to happen before the first write.
+    const chatRef =
+      sold && highBidderId
+        ? db().collection("chats").doc(chatIdFor(highBidderId, auction.sellerId))
+        : null;
+    const chatSnap = chatRef ? await tx.get(chatRef) : null;
+
     // ── writes ──
 
     const released = new Map<string, number>();
@@ -229,11 +251,25 @@ export async function settleAuction(
       tx.update(userSnap.ref, { creditsLocked: Math.max(0, current - stake) });
     }
 
+    let chatId: string | null = null;
+
     if (sold) {
       const winningBid = bidsSnap.docs.find(
         (doc) => doc.data().bidderId === highBidderId,
       );
       if (winningBid) tx.update(winningBid.ref, { status: "won" });
+
+      if (chatSnap && highBidderId && highBid !== null) {
+        chatId = writeHandoff(tx, chatSnap, {
+          auctionId,
+          auction,
+          buyerId: highBidderId,
+          price: highBid,
+          summary:
+            `You won "${auction.listingTitle}" at £${highBid}. ` +
+            `Arrange a meet and mark it complete when you have swapped.`,
+        }).chatId;
+      }
     }
 
     tx.update(auctionRef, {
@@ -241,6 +277,7 @@ export async function settleAuction(
       reserveMet,
       winnerId: sold ? highBidderId : null,
       winningBid: sold ? highBid : null,
+      chatId,
       endedAt: FieldValue.serverTimestamp(),
     });
 
@@ -248,6 +285,7 @@ export async function settleAuction(
       outcome: sold ? ("ended_sold" as const) : ("ended_unsold" as const),
       ...(sold ? { winnerId: highBidderId, winningBid: highBid } : {}),
       stakesReleased: releasing.length,
+      chatId,
     };
   });
 }
@@ -286,6 +324,36 @@ export const closeExpiredAuctions = onSchedule(
         const result = await settleAuction(doc.id);
         if (result.outcome === "ended_sold") sold++;
         if (result.outcome === "ended_unsold") unsold++;
+
+        // Told after the close commits. A closing that succeeded but whose
+        // notification failed is still a closing.
+        if (result.outcome === "ended_sold" || result.outcome === "ended_unsold") {
+          const auction = doc.data();
+          const title =
+            typeof auction.listingTitle === "string"
+              ? auction.listingTitle
+              : "Your item";
+
+          if (result.outcome === "ended_sold" && result.winnerId) {
+            await notifyWon(
+              result.winnerId,
+              doc.id,
+              title,
+              result.winningBid ?? 0,
+            );
+          }
+
+          if (typeof auction.sellerId === "string") {
+            await notifyAuctionClosed(
+              auction.sellerId,
+              doc.id,
+              title,
+              result.outcome,
+              result.winningBid ?? null,
+              result.outcome === "ended_sold" || !auction.hasReserve,
+            );
+          }
+        }
       } catch (error) {
         failed++;
         logger.error("Could not close auction", { auctionId: doc.id, error });
@@ -457,3 +525,49 @@ export const createAuctionCallable = onCall({ region }, async (request) => {
     typeof reservePrice === "number" ? reservePrice : null,
   );
 });
+
+/**
+ * Takes the stake off winners who never turned up.
+ *
+ * Runs hourly rather than every minute: the deadline is measured in days, and
+ * a member who completes an hour after the cutoff still gets their credits
+ * back through the completion path — this only catches the ones who don't.
+ */
+export const forfeitAbandonedWins = onSchedule(
+  { schedule: "every 60 minutes", region },
+  async () => {
+    const abandoned = await findAbandonedAuctions();
+    if (abandoned.length === 0) return;
+
+    let forfeited = 0;
+    let offered = 0;
+    let failed = 0;
+
+    for (const auctionId of abandoned) {
+      try {
+        const result = await forfeitAbandonedAuction(auctionId);
+        if (result.forfeited > 0) forfeited++;
+
+        if (result.runnerUpId) {
+          offered++;
+          await notifyRunnerUp(
+            result.runnerUpId,
+            auctionId,
+            result.listingTitle ?? "an item",
+            result.runnerUpBid ?? 0,
+          );
+        }
+      } catch (error) {
+        failed++;
+        logger.error("Could not forfeit an abandoned win", { auctionId, error });
+      }
+    }
+
+    logger.info("Abandonment pass finished", {
+      considered: abandoned.length,
+      forfeited,
+      offered,
+      failed,
+    });
+  },
+);

@@ -387,7 +387,7 @@ class _SellScreenState extends State<SellScreen> {
 
                 // Photos section
                 _buildLabel(
-                  'PHOTOS (${_images.length}/${ImageRepository.maxImages})',
+                  'PHOTOS ($_photoCount/${ImageRepository.maxImages})',
                 ),
                 AppSizes.gapHSm,
                 _buildPhotoPicker(),

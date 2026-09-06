@@ -68,4 +68,58 @@ void main() {
     act: (cubit) => cubit.loadProfile(),
     expect: () => [isA<ProfileLoading>(), isA<ProfileError>()],
   );
+
+  blocTest<ProfileCubit, ProfileState>(
+    'keeps the profile live once it has loaded',
+    // Credits, rating, dealCount and title are all written by Cloud Functions
+    // after the app has read the document. A one-shot fetch shows a number
+    // that was true when the screen opened and wrong the moment a deal lands.
+    setUp: () {
+      when(() => users.ensureProfile()).thenAnswer((_) async => profile);
+      when(() => users.watchUser('u1')).thenAnswer(
+        (_) => Stream.value(
+          const AppUser(
+            id: 'u1',
+            fullName: 'Amina Khan',
+            email: 'amina@uni.ac.uk',
+            university: 'Oxford',
+            rating: 5,
+            ratingCount: 1,
+            dealCount: 1,
+            title: 'Freshman Trader',
+            credits: 275,
+            creditsLocked: 0,
+            isSuspended: false,
+            createdAt: null,
+          ),
+        ),
+      );
+    },
+    build: () => ProfileCubit(users),
+    act: (cubit) async {
+      await cubit.watchProfile();
+      await Future<void>.delayed(Duration.zero);
+    },
+    expect: () => [
+      isA<ProfileLoading>(),
+      isA<ProfileLoaded>().having((s) => s.user.credits, 'first read', 50),
+      isA<ProfileLoaded>().having((s) => s.user.credits, 'live update', 275),
+    ],
+  );
+
+  blocTest<ProfileCubit, ProfileState>(
+    'losing the live stream does not wipe the profile off the screen',
+    setUp: () {
+      when(() => users.ensureProfile()).thenAnswer((_) async => profile);
+      when(
+        () => users.watchUser('u1'),
+      ).thenAnswer((_) => Stream.error(Exception('permission-denied')));
+    },
+    build: () => ProfileCubit(users),
+    act: (cubit) async {
+      await cubit.watchProfile();
+      await Future<void>.delayed(Duration.zero);
+    },
+    expect: () => [isA<ProfileLoading>(), isA<ProfileLoaded>()],
+  );
 }

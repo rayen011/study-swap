@@ -767,6 +767,56 @@ describe("listings going up for auction", () => {
   });
 });
 
+describe("push tokens", () => {
+  test("you can register your own device", async () => {
+    await assertSucceeds(
+      setDoc(doc(as(ALICE), "users", ALICE, "devices", "token-1"), {
+        platform: "android",
+        updatedAt: new Date(),
+      }),
+    );
+  });
+
+  test("and remove it again", async () => {
+    await seed((db) =>
+      setDoc(doc(db, "users", ALICE, "devices", "token-1"), {
+        platform: "android",
+      }),
+    );
+
+    await assertSucceeds(
+      deleteDoc(doc(as(ALICE), "users", ALICE, "devices", "token-1")),
+    );
+  });
+
+  test("nobody can register a device against somebody else", async () => {
+    // Otherwise you could point their notifications at your phone.
+    await assertFails(
+      setDoc(doc(as(BOB), "users", ALICE, "devices", "token-2"), {
+        platform: "android",
+      }),
+    );
+  });
+
+  test("nor read the list of devices they sign in from", async () => {
+    await seed((db) =>
+      setDoc(doc(db, "users", ALICE, "devices", "token-1"), {
+        platform: "android",
+      }),
+    );
+
+    await assertFails(
+      getDocs(collection(as(BOB), "users", ALICE, "devices")),
+    );
+  });
+
+  test("not even a moderator", async () => {
+    await assertFails(
+      getDocs(collection(asModerator(), "users", ALICE, "devices")),
+    );
+  });
+});
+
 // ─────────────────────────────────────────────────────────── auctions
 
 describe("auctions", () => {

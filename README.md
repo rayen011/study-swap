@@ -35,18 +35,22 @@ deal complete, can't review the same deal twice, and can't touch their own ratin
 - **Marketplace feed** — server-side filtering by category and condition, three sort
   orders, paginated 20 at a time, with debounced search over the loaded window
 - **Listings** — up to five photos with compression, live status (active / reserved /
-  sold), favourites
+  sold), favourites. Sellers edit, reserve or delete their own from one sheet, reachable
+  from the feed, the Collection tab and their profile
 - **Chat** — realtime messaging with unread counts, and deal requests as a first-class
   message type
 - **Reputation** — ratings, review history, and titles that climb from *Freshman Trader*
   to *Campus Pro* with completed deals
 - **Credits** — bidding power earned by completing trades, never bought and never cashed
   out. The foundation of an auction feature; see *Known gaps*
+- **Push notifications** — outbid, won, your auction closed, and the runner-up offer.
+  Tokens live in a per-user subcollection nobody else can read
 - **Auctions** — a listing can be sold to the highest bidder instead of at a fixed price,
   with a hidden reserve, anti-snipe extensions, and a scheduled function that closes the
   floor on time. Bidding costs credits to hold, so an unbacked bid is arithmetically
   impossible. The sell form offers it as a mode; the room is a full-screen route with the
-  tab bar gone — deliberately a place you enter, not a sixth tab
+  tab bar gone — deliberately a place you enter, not a sixth tab. Winning hands off to the
+  ordinary chat and deal flow rather than inventing a second one
 - **Moderation** — report users or listings; moderators get a queue, and can hide a
   listing or suspend an account
 
@@ -90,10 +94,12 @@ can be believed.**
 | --- | --- |
 | Moderator access | An auth custom claim, never a Firestore field — a client-written field isn't an authorization decision |
 | Ratings, deal counts, titles | Owned by Cloud Functions; they appear in no client-writable shape in the rules |
+| Push tokens | A per-user subcollection only its owner can read or write. Not even a moderator can see the devices somebody signs in from, and nobody can register a token against another account |
 | Credit balances | Same, and for a sharper reason — credits are what a bid will cost, so a self-written balance is a self-written bid ceiling. The one exception is signup, where the rules accept a single fixed opening value |
 | Auctions and bids | No client writes any part of either. Bidding is a callable, closing is scheduled, and both run as the Admin SDK |
 | Shill bidding | A seller cannot bid on their own auction, checked inside the same transaction that records the bid |
 | Opening a floor | A callable that checks the listing is yours, active, and not already up. The rules pin a client-written listing to `saleMode: 'fixed'` and forbid `auctionId` outright |
+| Editing a listing under bids | A listing with a floor open is frozen — the rules refuse every owner edit and the owner's delete. Bidders staked credits against that title, photo and price |
 | Hidden reserve prices | Rules can deny a document but cannot hide a field, so the reserve lives in a subcollection only the seller can read. The auction itself carries whether one exists, never what it is |
 | One review per deal | Deterministic document ids, create-only. A second review collides rather than overwriting |
 | Deal transitions | Accept, decline and complete all require `uid() == dealData.sellerId` |
@@ -102,7 +108,7 @@ can be believed.**
 
 [`firestore.rules`](firestore.rules), [`storage.rules`](storage.rules) and
 [`functions/`](functions/) are all in the repo — and all of it is tested.
-[`rules-tests/`](rules-tests/) runs 94 assertions against the Firebase emulators, from
+[`rules-tests/`](rules-tests/) runs 104 assertions against the Firebase emulators, from
 "a user can't write their own rating" to "only the seller can complete a deal".
 
 Those tests were themselves mutation-tested: rules were deliberately loosened to
@@ -166,9 +172,9 @@ afterwards — a new claim only reaches an existing token on refresh.
 ## Tests
 
 ```bash
-flutter test                              # 212 Dart tests
-npm --prefix rules-tests run emulate      # 94 security rules tests (needs JDK 21+)
-npm --prefix functions run test:emulate   # 71 Cloud Functions tests (needs JDK 21+)
+flutter test                              # 237 Dart tests
+npm --prefix rules-tests run emulate      # 104 security rules tests (needs JDK 21+)
+npm --prefix functions run test:emulate   # 98 Cloud Functions tests (needs JDK 21+)
 ```
 
 The cubit suites use `bloc_test` with mocked repositories; the rest cover model parsing
@@ -227,10 +233,8 @@ neo-brutalist shadow becomes in the dark is a design decision, not a find-and-re
   debug key
 - Meetup location is a placeholder rather than a real campus picker
 - Credits are earned but not yet spent — bidding itself is the next piece of work
-- The auction handoff isn't built: a won auction sets a winner but doesn't yet open the
-  chat and drop in the deal card
-- No push notifications, which an auction needs more than anything else here — "you've
-  been outbid" is most of what makes bidding worth returning to
+- "Ending soon" notifications need a watcher list, which does not exist — only people
+  who have actually bid can currently be told anything about an auction
 - No scheduled function runs on the Spark plan, so the auction closer needs Blaze
 
 ---

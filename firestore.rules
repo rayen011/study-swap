@@ -122,6 +122,16 @@ service cloud.firestore {
       match /favorites/{listingId} {
         allow read, write: if isSelf(userId);
       }
+
+      // Push tokens, one document per device, keyed by the token itself.
+      //
+      // A subcollection rather than a field on the profile: the profile's
+      // shape is pinned key by key above, tokens come and go with every
+      // reinstall, and nobody but their owner has any business reading the
+      // list of devices somebody signs in from.
+      match /devices/{token} {
+        allow read, write: if isSelf(userId);
+      }
     }
 
     // ── listings ──────────────────────────────────────────────────────────

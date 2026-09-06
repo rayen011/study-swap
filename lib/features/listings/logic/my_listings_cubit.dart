@@ -22,14 +22,10 @@ class MyListingsCubit extends Cubit<ListingState> {
     );
   }
 
-  /// Deletes a listing. Its photos are removed by onListingDeleted.
-  Future<void> deleteListing(String listingId) async {
-    try {
-      await _listingRepository.deleteListing(listingId);
-    } catch (e) {
-      emit(ListingError(e.toString()));
-    }
-  }
+  // Deleting lives on ListingCubit, which is what the owner-actions sheet
+  // talks to. A second copy here would be a second place to keep in step for
+  // no gain: this cubit watches a stream, so a delete made anywhere shows up
+  // in the profile grid and the Collection tab on its own.
 
   @override
   Future<void> close() {

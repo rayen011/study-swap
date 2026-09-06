@@ -336,14 +336,31 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.handshake, color: AppColors.primaryBlue),
+              Icon(
+                deal.isFromAuction ? Icons.gavel_rounded : Icons.handshake,
+                color: deal.isFromAuction
+                    ? AppColors.solidBlack
+                    : AppColors.primaryBlue,
+              ),
               const SizedBox(width: 8),
-              Text(
-                'DEAL REQUEST',
-                style: AppTextStyles.heading2.copyWith(fontSize: 16),
+              Expanded(
+                child: Text(
+                  // A price the room decided is not a price either of them
+                  // proposed, and the card should not pretend otherwise.
+                  deal.isFromAuction ? 'WON AT AUCTION' : 'DEAL REQUEST',
+                  style: AppTextStyles.heading2.copyWith(fontSize: 16),
+                ),
               ),
             ],
           ),
+          if (deal.isFromAuction)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Agreed at the winning bid. Meet up, then ${isMe ? 'mark it' : 'they will mark it'} complete.',
+                style: AppTextStyles.bodySmall.copyWith(height: 1.4),
+              ),
+            ),
           const Divider(height: 24),
           Text(
             deal.title,

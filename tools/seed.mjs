@@ -99,6 +99,46 @@ const LISTINGS = [
   ["Bike with lock and lights", "Hybrid, recently serviced. Graduating, so it has to go.", 95, "other", "good", 2],
 ];
 
+// Things whose worth is genuinely hard to guess — which is the only kind of
+// item the Bid Room is for.
+//
+// [title, description, opening price, ownerIndex, hours left, bids]
+// Each bid is [bidderIndex, amount].
+const AUCTIONS = [
+  [
+    "Signed university rugby ball",
+    "Signed by the whole 2019 first team after the varsity match. No idea what it's worth.",
+    10,
+    0,
+    0.03,
+    [[1, 45], [2, 62], [1, 85]],
+  ],
+  [
+    "Vintage college scarf, 1987",
+    "Found it in my grandad's attic. The stripes are the old college colours.",
+    8,
+    2,
+    27,
+    [[0, 22], [1, 46]],
+  ],
+  [
+    "Graduation gown and hood, size M",
+    "Worn once. Cheaper than hiring one, if you're graduating this year.",
+    15,
+    1,
+    5.2,
+    [[2, 32]],
+  ],
+  [
+    "Physics dept. lab coat, signed",
+    "Signed by the department when they retired. Genuinely have no idea what to ask.",
+    12,
+    0,
+    164,
+    [],
+  ],
+];
+
 const cleanOnly = process.argv.includes("--clean");
 const wipe = cleanOnly || process.argv.includes("--wipe");
 
@@ -122,6 +162,16 @@ async function wipeDemoData() {
 
   await deleteAll(db.collection("listings").where("userId", "in", ids), "listings");
   await deleteAll(db.collection("reviews").where("toId", "in", ids), "reviews");
+
+  // Auctions go with their listings. Each one's bids and private reserve are
+  // subcollections, so the parent has to be emptied before it is deleted.
+  const auctions = await db.collection("auctions").where("sellerId", "in", ids).get();
+  for (const auction of auctions.docs) {
+    await deleteAll(auction.ref.collection("bids"), "bids");
+    await deleteAll(auction.ref.collection("private"), "reserves");
+    await auction.ref.delete();
+  }
+  if (auctions.size > 0) console.log(`  removed ${auctions.size} auctions`);
 
   const chats = await db.collection("chats").get();
   for (const chat of chats.docs) {
@@ -242,6 +292,94 @@ async function seedConversation(listingId) {
   return chatId;
 }
 
+/**
+ * Opens demo floors, with bids already on them.
+ *
+ * Written with the Admin SDK exactly as `createAuctionCallable` and
+ * `placeBid` would — the reserve in the private subcollection, the stakes
+ * held on the leading bidder, the beaten bids marked outbid. A room seeded
+ * any other way would look right and behave wrongly the moment anybody bid.
+ */
+async function seedAuctions() {
+  const batch = db.batch();
+  let count = 0;
+
+  for (const [title, description, startPrice, ownerIndex, hoursLeft, bids] of AUCTIONS) {
+    const owner = DEMO_USERS[ownerIndex];
+
+    const listingRef = db.collection("listings").doc();
+    const auctionRef = db.collection("auctions").doc();
+
+    const leading = bids.length ? bids[bids.length - 1] : null;
+    const leadingBidder = leading ? DEMO_USERS[leading[0]] : null;
+
+    batch.set(listingRef, {
+      title,
+      description,
+      price: startPrice,
+      category: "other",
+      condition: "good",
+      university: owner.university,
+      userId: owner.id,
+      sellerName: owner.fullName,
+      imageUrls: [],
+      status: "active",
+      saleMode: "auction",
+      auctionId: auctionRef.id,
+      createdAt: new Date(Date.now() - 86_400_000),
+    });
+
+    batch.set(auctionRef, {
+      listingId: listingRef.id,
+      listingTitle: title,
+      listingImage: "",
+      sellerId: owner.id,
+      sellerName: owner.fullName,
+      startPrice,
+      currentBid: leading ? leading[1] : null,
+      currentBidderId: leadingBidder ? leadingBidder.id : null,
+      bidCount: bids.length,
+      status: "live",
+      endsAt: new Date(Date.now() + hoursLeft * 3_600_000),
+      extensionsMs: 0,
+      // One of them has a reserve, so the badge has somewhere to show.
+      hasReserve: title.startsWith("Signed university"),
+      reserveMet: false,
+      winnerId: null,
+      winningBid: null,
+      chatId: null,
+      createdAt: new Date(Date.now() - 86_400_000),
+    });
+
+    if (title.startsWith("Signed university")) {
+      batch.set(auctionRef.collection("private").doc("config"), {
+        reservePrice: 120,
+      });
+    }
+
+    bids.forEach(([bidderIndex, amount], i) => {
+      const bidder = DEMO_USERS[bidderIndex];
+      const isLeading = i === bids.length - 1;
+
+      batch.set(auctionRef.collection("bids").doc(), {
+        bidderId: bidder.id,
+        bidderName: bidder.fullName,
+        amount,
+        stakeLocked: Math.ceil(amount / 10),
+        // Only the top bid still holds credits. Everyone else got theirs
+        // back the moment they were beaten.
+        status: isLeading ? "active" : "outbid",
+        placedAt: new Date(Date.now() - (bids.length - i) * 900_000),
+      });
+    });
+
+    count++;
+  }
+
+  await batch.commit();
+  console.log(`Seeded ${count} auctions`);
+}
+
 async function seedReviews(chatId) {
   const [amina, ben] = DEMO_USERS;
   const id = (from, to) => `review_${chatId}_${from}_${to}`;
@@ -278,6 +416,7 @@ async function main() {
 
   await seedUsers();
   const listingIds = await seedListings();
+  await seedAuctions();
   const chatId = await seedConversation(listingIds[0]);
   await seedReviews(chatId);
 

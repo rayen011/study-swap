@@ -46,7 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    context.read<ProfileCubit>().loadProfile();
+    context.read<ProfileCubit>().watchProfile();
     context.read<MyListingsCubit>().fetchUserListings();
     _loadReviews();
     _loadModeratorStatus();
@@ -568,88 +568,88 @@ class _ProfileScreenState extends State<ProfileScreen>
           ],
         ),
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Image area
-          Expanded(
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(14),
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ListingImage(
-                    url: listing.coverImageUrl,
-                    placeholderIconSize: 32,
-                    placeholderColor: AppColors.background,
-                  ),
-                  // Status badge
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: AppColors.solidBlack,
-                          width: 1,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image area
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(14),
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ListingImage(
+                      url: listing.coverImageUrl,
+                      placeholderIconSize: 32,
+                      placeholderColor: AppColors.background,
+                    ),
+                    // Status badge
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
                         ),
-                      ),
-                      child: Text(
-                        listing.status.label.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: AppColors.solidBlack,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          listing.status.label.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ),
+            // Info
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    listing.title,
+                    style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        listing.formattedPrice,
+                        style: AppTextStyles.heading2.copyWith(
+                          fontSize: 14,
+                          color: AppColors.primaryBlue,
+                        ),
+                      ),
+                      Text(
+                        listing.categoryLabel,
+                        style: AppTextStyles.bodyMedium.copyWith(fontSize: 9),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
-          // Info
-          Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  listing.title,
-                  style: AppTextStyles.bodyMediumDark.copyWith(fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      listing.formattedPrice,
-                      style: AppTextStyles.heading2.copyWith(
-                        fontSize: 14,
-                        color: AppColors.primaryBlue,
-                      ),
-                    ),
-                    Text(
-                      listing.categoryLabel,
-                      style: AppTextStyles.bodyMedium.copyWith(fontSize: 9),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
         ),
       ),
     );

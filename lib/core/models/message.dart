@@ -32,6 +32,7 @@ class DealRequest extends Equatable {
     required this.status,
     required this.buyerId,
     required this.sellerId,
+    required this.auctionId,
   });
 
   final String itemId;
@@ -40,6 +41,12 @@ class DealRequest extends Equatable {
   final DealStatus status;
   final String buyerId;
   final String sellerId;
+
+  /// The auction this deal came out of, when it came out of one.
+  ///
+  /// Written by the handoff, never by the app. Its presence is what tells the
+  /// card it was won rather than agreed.
+  final String? auctionId;
 
   factory DealRequest.fromMap(Map<String, dynamic> data) {
     return DealRequest(
@@ -53,6 +60,9 @@ class DealRequest extends Equatable {
         data['sellerId'],
         fallback: asString(data['listingOwnerId']),
       ),
+      auctionId: data['auctionId'] is String
+          ? data['auctionId'] as String
+          : null,
     );
   }
 
@@ -61,8 +71,19 @@ class DealRequest extends Equatable {
   bool isSeller(String uid) => uid == sellerId;
   bool isBuyer(String uid) => uid == buyerId;
 
+  /// Whether the room decided this price rather than the two of them.
+  bool get isFromAuction => auctionId != null;
+
   @override
-  List<Object?> get props => [itemId, title, price, status, buyerId, sellerId];
+  List<Object?> get props => [
+    itemId,
+    title,
+    price,
+    status,
+    buyerId,
+    sellerId,
+    auctionId,
+  ];
 }
 
 /// A single chat message — either plain text or a deal request.

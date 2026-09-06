@@ -20,6 +20,7 @@ import { logger } from "firebase-functions";
 
 import { extendedEnd, minimumBidFor } from "./auctions";
 import { maxBidFor, stakeFor } from "./credits";
+import { notifyOutbid } from "./notify";
 
 const region = "europe-west2";
 
@@ -34,6 +35,8 @@ export interface PlaceBidResult {
   endsAt: number;
   /** True when this bid pushed the closing time out. */
   extended: boolean;
+  /** Who this bid beat, so the caller can tell them. */
+  outbid?: { bidderId: string; title: string } | null;
 }
 
 /**
@@ -169,6 +172,12 @@ export async function placeBid(
 
     // ── writes ──
 
+    // Who to tell, once this has committed. Collected here because the
+    // transaction knows who was standing and the caller does not.
+    const beaten = releasing
+      .map((doc) => doc.data().bidderId)
+      .find((id): id is string => typeof id === "string");
+
     const released = new Map<string, number>();
     for (const doc of releasing) {
       const previous = doc.data();
@@ -234,6 +243,15 @@ export async function placeBid(
       stakeLocked: stake,
       endsAt: moved.endsAtMs,
       extended,
+      outbid: beaten
+        ? {
+            bidderId: beaten,
+            title:
+              typeof auction.listingTitle === "string"
+                ? auction.listingTitle
+                : "An item",
+          }
+        : null,
     };
   });
 }
@@ -261,6 +279,17 @@ export const placeBidCallable = onCall({ region }, async (request) => {
   }
 
   const result = await placeBid(request.auth.uid, auctionId, amount);
+
+  // After the commit, never inside it: a network call in a transaction is
+  // retried with the transaction, and would send the same push twice.
+  if (result.outbid) {
+    await notifyOutbid(
+      result.outbid.bidderId,
+      auctionId,
+      result.outbid.title,
+      result.amount,
+    );
+  }
 
   logger.info("Bid placed", {
     auctionId,

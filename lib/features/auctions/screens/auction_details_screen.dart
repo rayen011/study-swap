@@ -12,6 +12,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/theme/room_colors.dart';
 import '../../../core/widgets/error_state_view.dart';
 import '../../../core/widgets/listing_image.dart';
+import '../../chat/screens/chat_details_screen.dart';
 import '../../profile/data/user_repository.dart';
 import '../data/auction_repository.dart';
 import '../logic/auction_cubit.dart';
@@ -563,19 +564,40 @@ class _BidBar extends StatelessWidget {
   }
 
   Widget _bar(BuildContext context, AppUser? bidder, DateTime now) {
+    // A closed auction you were part of is not a dead end: the deal is
+    // waiting in a chat, and this is where somebody would look for it.
+    final chatId = auction.chatId;
+    final isWinner = auction.winnerId != null && auction.winnerId == uid;
+    if (chatId != null && (isWinner || auction.isSeller(uid))) {
+      return _OpenChat(
+        chatId: chatId,
+        isWinner: isWinner,
+        otherName: isWinner ? auction.sellerName : 'the winner',
+        price: auction.winningBid ?? auction.displayPrice,
+      );
+    }
+
     if (auction.isSeller(uid)) {
       return _Note(
         icon: Icons.storefront_outlined,
-        text: 'This is yours. You cannot bid on it.',
+        text: auction.status.isLive
+            ? 'This is yours. You cannot bid on it.'
+            : 'This is yours. ${auction.status.label}.',
       );
     }
 
     if (!auction.acceptsBids(now)) {
       return _Note(
         icon: Icons.lock_outline_rounded,
-        text: auction.status.hasEnded
-            ? 'Bidding closed. ${auction.status.label}.'
-            : 'Bidding closed.',
+        text: switch (auction.status) {
+          AuctionStatus.endedUnsold
+              when auction.hasReserve && !auction.reserveMet =>
+            'It closed under the reserve. Nothing sold and every stake is back.',
+          AuctionStatus.endedUnsold => 'It closed with nobody bidding.',
+          AuctionStatus.abandoned =>
+            'The winner never turned up. Their stake went to the seller.',
+          _ => 'Bidding closed. ${auction.status.label}.',
+        },
       );
     }
 
@@ -667,6 +689,72 @@ class _Note extends StatelessWidget {
             style: AppTextStyles.bodyMedium.copyWith(
               fontSize: 13,
               color: RoomColors.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The way from a finished auction into the deal it created.
+class _OpenChat extends StatelessWidget {
+  const _OpenChat({
+    required this.chatId,
+    required this.isWinner,
+    required this.otherName,
+    required this.price,
+  });
+
+  final String chatId;
+  final bool isWinner;
+  final String otherName;
+  final double price;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            isWinner
+                ? "It's yours at £${price.toStringAsFixed(0)}. The deal is "
+                      'waiting in your chat with $otherName.'
+                : 'Sold at £${price.toStringAsFixed(0)}. The deal is in your '
+                      'chat with $otherName.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: RoomColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ),
+        AppSizes.gapWMD,
+        GestureDetector(
+          onTap: () => context.push(
+            '/chat-details',
+            extra: ChatDetailsArgs(
+              chatId: chatId,
+              receiverName: otherName,
+              receiverId: chatId
+                  .split('_')
+                  .firstWhere(
+                    (id) => id != FirebaseAuth.instance.currentUser?.uid,
+                    orElse: () => '',
+                  ),
+            ),
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: BoxDecoration(
+              color: RoomColors.accent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'OPEN CHAT',
+              style: AppTextStyles.buttonText.copyWith(
+                fontSize: 14,
+                color: AppColors.solidBlack,
+              ),
             ),
           ),
         ),

@@ -22,11 +22,16 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 
 import { CREDITS, creditsForReview } from "./credits";
+import { settleCompletedAuction } from "./handoff";
 
 // The auction floor: the function that closes it, and the one thing a client
 // is allowed to ask for. Re-exported so Firebase finds them — only what the
 // entry point exports gets deployed.
-export { closeExpiredAuctions, createAuctionCallable } from "./auctions";
+export {
+  closeExpiredAuctions,
+  createAuctionCallable,
+  forfeitAbandonedWins,
+} from "./auctions";
 export { placeBidCallable } from "./bids";
 
 initializeApp();
@@ -131,6 +136,7 @@ export const onDealCompleted = onDocumentUpdated(
       buyerId?: string;
       sellerId?: string;
       itemId?: string;
+      auctionId?: string;
     };
 
     if (!deal.buyerId || !deal.sellerId) {
@@ -175,10 +181,28 @@ export const onDealCompleted = onDocumentUpdated(
       }
     });
 
+    // A deal that came out of an auction has a stake still held against it.
+    // Settled after the transaction above, not inside it: the reputation
+    // move is what matters to both parties, and a failure to unwind the
+    // auction should not cost them their deal counts. The next completion
+    // event, or the abandonment pass, would catch it.
+    const auctionId = (deal as { auctionId?: string }).auctionId;
+    if (typeof auctionId === "string" && auctionId.length > 0) {
+      try {
+        await settleCompletedAuction(auctionId, deal.buyerId);
+      } catch (error) {
+        logger.error("Deal completed but its auction did not settle", {
+          auctionId,
+          error,
+        });
+      }
+    }
+
     logger.info("Deal settled", {
       chatId: event.params.chatId,
       buyerId: deal.buyerId,
       sellerId: deal.sellerId,
+      auctionId: auctionId ?? null,
     });
   }
 );
